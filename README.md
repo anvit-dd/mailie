@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# mailie
 
-## Getting Started
+> Minimal brutalist email client — Gmail OAuth2, dark mode, mobile-first.
 
-First, run the development server:
+**mailie** is a lightweight webmail client that connects to your Gmail account via OAuth2. Built with Next.js 15, shadcn/ui, and SQLite for session storage. No database setup required — just configure and run.
+
+## Features
+
+- 🔐 **Gmail OAuth2** — secure authentication, tokens stored server-side in SQLite
+- 🌙 **Dark mode** — brutalist minimal aesthetic, always-on dark
+- 📱 **Responsive** — mobile-first design, slides into full-screen reader on phone
+- ⚡ **Fast** — SQLite sessions, lazy-loaded email bodies via `srcDoc` iframes
+- 🛡️ **Secure** — HTTP-only session cookies, CSP headers, no email passwords stored
+
+## Setup
+
+### 1. Clone & install
+
+```bash
+git clone https://github.com/anvit-dd/mailie.git
+cd mailie
+npm install
+```
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` with your credentials:
+
+| Variable | Where to get it |
+|---|---|
+| `NEXT_PUBLIC_GMAIL_CLIENT_ID` | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → OAuth 2.0 Client ID |
+| `GMAIL_CLIENT_SECRET` | Same OAuth client, copy the secret |
+| `SESSION_SECRET` | Run `openssl rand -hex 32` to generate |
+| `NEXT_PUBLIC_APP_URL` | `http://localhost:3333` for dev, or your production domain |
+
+### 3. Configure Google OAuth
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create an **OAuth 2.0 Client ID** (Web application)
+3. Add an **authorized redirect URI**:
+   - Dev: `http://localhost:3333/api/auth/callback`
+   - Production: `https://your-domain.com/api/auth/callback`
+4. Copy the **Client ID** and **Client Secret** into `.env.local`
+
+### 4. Run
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3333](http://localhost:3333) and click **Connect Gmail**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tech stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Next.js 15** (App Router, TypeScript)
+- **shadcn/ui** + **Tailwind CSS v4**
+- **SQLite** via `better-sqlite3` (sessions + token storage)
+- **Gmail API** via Google OAuth2
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+├── app/api/
+│   ├── auth/          # OAuth2 flow, session management
+│   └── gmail/         # Gmail API proxy (list, read, send, modify)
+├── components/        # UI components
+├── contexts/          # Auth + email React contexts
+└── lib/
+    ├── db.ts          # SQLite schema (accounts, sessions, tokens)
+    └── session.ts     # Session CRUD helpers
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run build
+npm start
+```
 
-## Deploy on Vercel
+Any platform that supports Node.js (Vercel, Railway, Render, Fly.io, etc.).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+> **Note:** For production on Vercel, either switch `better-sqlite3` to `@libsql/client` (Turso) or use a serverless-compatible SQLite binding. The current `better-sqlite3` approach works on VPS/dedicated Node.js hosting.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+MIT

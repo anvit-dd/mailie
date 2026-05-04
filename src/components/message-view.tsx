@@ -1,0 +1,45 @@
+'use client'
+
+import { useEmail } from '@/contexts/email-context'
+import { MessageHeader } from './message-header'
+import { MessageBody } from './message-body'
+import { RefreshCw } from 'lucide-react'
+
+interface MessageViewProps {
+  onReply: () => void
+  onForward: () => void
+}
+
+export function MessageView({ onReply, onForward }: MessageViewProps) {
+  const { selectedEmail, isLoading } = useEmail()
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!selectedEmail) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="font-mono text-5xl text-muted-foreground mb-4 select-none">
+            {'<'}{'-'}
+          </div>
+          <p className="font-mono text-sm text-muted-foreground">
+            Select an email to read
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <MessageHeader onReply={onReply} onForward={onForward} />
+      <MessageBody />
+    </div>
+  )
+}
