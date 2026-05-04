@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { MessageView } from './message-view'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,21 @@ interface MessageSheetProps {
 
 export function MessageSheet({ onReply, onForward }: MessageSheetProps) {
   const { selectedEmail, setSelectedEmail } = useEmail()
+  const [isDesktop, setIsDesktop] = useState(false)
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px)')
+    const update = () => setIsDesktop(media.matches)
+
+    update()
+    media.addEventListener('change', update)
+
+    return () => media.removeEventListener('change', update)
+  }, [])
+
+  if (!selectedEmail) return null
+
+  if (isDesktop) return null
 
   return (
     <Sheet open={!!selectedEmail} onOpenChange={(open) => {

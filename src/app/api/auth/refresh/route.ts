@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, getAccountWithTokens } from '@/lib/session'
 import { db } from '@/lib/db'
+import { getGmailClientId, getGmailClientSecret } from '@/lib/gmail-config'
 
 export async function POST(request: NextRequest) {
   const sessionId = request.cookies.get('session')?.value
@@ -23,8 +24,8 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: process.env.NEXT_PUBLIC_GMAIL_CLIENT_ID!,
-        client_secret: process.env.GMAIL_CLIENT_SECRET!,
+        client_id: getGmailClientId(),
+        client_secret: getGmailClientSecret(),
         refresh_token: account.gmailTokens.refresh_token,
         grant_type: 'refresh_token',
       }),

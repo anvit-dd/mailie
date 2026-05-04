@@ -1,6 +1,7 @@
 'use client'
 
 import { useEmail } from '@/contexts/email-context'
+import type { EmailDetail } from '@/types/email'
 import { File, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useEffect, useRef, useState } from 'react'
@@ -132,24 +133,18 @@ function buildSrcdoc(html: string): string {
 </html>`
 }
 
-export function MessageBody() {
-  const { selectedEmail } = useEmail()
+function MessageBodyContent({ selectedEmail }: { selectedEmail: EmailDetail }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [iframeHeight, setIframeHeight] = useState(400)
   const [emailHtml, setEmailHtml] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(Boolean(selectedEmail.body))
   const [error, setError] = useState<string | null>(null)
 
   // Fetch email body HTML when a new email is selected
   useEffect(() => {
-    if (!selectedEmail?.id || !selectedEmail.body) {
-      setEmailHtml(null)
+    if (!selectedEmail.body) {
       return
     }
-
-    setIsLoading(true)
-    setError(null)
-    setEmailHtml(null)
 
     const controller = new AbortController()
 
@@ -165,13 +160,13 @@ export function MessageBody() {
         setIsLoading(false)
       })
       .catch((err) => {
-        if (err.name === 'AbortError') return
-        setError(err.message)
+        if (err instanceof Error && err.name === 'AbortError') return
+        setError(err instanceof Error ? err.message : 'Failed to load email')
         setIsLoading(false)
       })
 
     return () => controller.abort()
-  }, [selectedEmail?.id])
+  }, [selectedEmail.id, selectedEmail.body])
 
   // Resize iframe to content using postMessage
   useEffect(() => {
@@ -196,21 +191,6 @@ export function MessageBody() {
     iframe.addEventListener('load', handleLoad)
     return () => iframe.removeEventListener('load', handleLoad)
   }, [emailHtml])
-
-  if (!selectedEmail) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="font-mono text-4xl text-muted-foreground mb-4 select-none">
-            {'<-'}
-          </div>
-          <p className="font-mono text-sm text-muted-foreground">
-            Select an email to read
-          </p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="flex flex-col h-full">
@@ -288,4 +268,25 @@ export function MessageBody() {
       )}
     </div>
   )
+}
+
+export function MessageBody() {
+  const { selectedEmail } = useEmail()
+
+  if (!selectedEmail) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="font-mono text-4xl text-muted-foreground mb-4 select-none">
+            {'<-'}
+          </div>
+          <p className="font-mono text-sm text-muted-foreground">
+            Select an email to read
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return <MessageBodyContent key={selectedEmail.id} selectedEmail={selectedEmail} />
 }

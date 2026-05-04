@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server'
+import { getGmailClientId, getGmailRedirectUri } from '@/lib/gmail-config'
 
 export async function GET() {
-  const clientId = process.env.NEXT_PUBLIC_GMAIL_CLIENT_ID
-  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback`
+  let clientId: string
+  let redirectUri: string
 
-  if (!clientId) {
+  try {
+    clientId = getGmailClientId()
+    redirectUri = getGmailRedirectUri()
+  } catch {
     return NextResponse.json({ error: 'Gmail OAuth not configured' }, { status: 500 })
   }
 

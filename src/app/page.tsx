@@ -10,11 +10,11 @@ import { MessageSheet } from '@/components/message-sheet'
 import { Compose } from '@/components/compose'
 import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
 
 export default function Home() {
   const { isAuthenticated, isLoading, login } = useAuth()
   const [isComposeOpen, setIsComposeOpen] = useState(false)
+  const [composeNonce, setComposeNonce] = useState(0)
   const [replyTo, setReplyTo] = useState<ComposeProps['replyTo'] | undefined>()
 
   interface ComposeProps {
@@ -29,11 +29,19 @@ export default function Home() {
 
   const handleReply = () => {
     setReplyTo(undefined)
+    setComposeNonce((value) => value + 1)
     setIsComposeOpen(true)
   }
 
   const handleForward = () => {
     setReplyTo(undefined)
+    setComposeNonce((value) => value + 1)
+    setIsComposeOpen(true)
+  }
+
+  const handleCompose = () => {
+    setReplyTo(undefined)
+    setComposeNonce((value) => value + 1)
     setIsComposeOpen(true)
   }
 
@@ -102,14 +110,14 @@ export default function Home() {
     <div className="flex h-screen bg-background">
       {/* Desktop sidebar — hidden on mobile */}
       <div className="hidden md:flex">
-        <Sidebar onCompose={() => setIsComposeOpen(true)} />
+        <Sidebar onCompose={handleCompose} />
       </div>
 
       {/* Mobile: hamburger nav + email list side by side */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Top bar for mobile */}
         <div className="flex items-center gap-2 p-3 border-b border-border md:hidden bg-surface">
-          <MobileNav onCompose={() => setIsComposeOpen(true)} />
+          <MobileNav onCompose={handleCompose} />
           <span className="font-mono text-base font-bold tracking-tight">
             <span className="text-accent">mailie</span>
             <span className="text-muted-foreground">_</span>
@@ -135,6 +143,7 @@ export default function Home() {
 
       {/* Compose Dialog */}
       <Compose
+        key={`${composeNonce}-${replyTo?.subject ?? 'new'}`}
         isOpen={isComposeOpen}
         onClose={() => {
           setIsComposeOpen(false)

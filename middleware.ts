@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
-export function middleware(request: NextRequest) {
+export function middleware() {
   // Security headers for all responses
   const response = NextResponse.next()
   response.headers.set('X-Frame-Options', 'DENY')

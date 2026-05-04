@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useEmail } from '@/contexts/email-context'
 import { Button } from '@/components/ui/button'
@@ -15,7 +14,6 @@ import {
   PenSquare,
   Settings,
   LogOut,
-  ChevronRight,
 } from 'lucide-react'
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {

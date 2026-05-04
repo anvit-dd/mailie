@@ -15,7 +15,6 @@ import {
   Settings,
   LogOut,
   Menu,
-  ChevronLeft,
 } from 'lucide-react'
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {

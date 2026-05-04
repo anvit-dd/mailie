@@ -2,11 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import { useEmail } from '@/contexts/email-context'
 import { toast } from 'sonner'
 import {
@@ -14,7 +12,6 @@ import {
   Send,
   Paperclip,
   File,
-  Trash2,
   Loader2,
 } from 'lucide-react'
 import type { Draft } from '@/types/email'
@@ -34,25 +31,16 @@ interface ComposeProps {
 export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
   const { saveDraft } = useEmail()
 
-  const [to, setTo] = useState<string[]>([])
+  const [to, setTo] = useState<string[]>(() => (replyTo?.to ? [replyTo.to] : []))
   const [toInput, setToInput] = useState('')
-  const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
+  const [subject, setSubject] = useState(
+    replyTo?.subject ? (replyTo.subject.startsWith('Re:') ? replyTo.subject : `Re: ${replyTo.subject}`) : ''
+  )
+  const [body, setBody] = useState(replyTo?.body ? `\n\n--- Original Message ---\n${replyTo.body}\n\n` : '')
   const [attachments, setAttachments] = useState<File[]>([])
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
-
-  // Initialize from replyTo
-  useEffect(() => {
-    if (replyTo) {
-      setTo(replyTo.to ? [replyTo.to] : [])
-      setSubject(replyTo.subject.startsWith('Re:')
-        ? replyTo.subject
-        : `Re: ${replyTo.subject}`)
-      setBody(`\n\n--- Original Message ---\n${replyTo.body}\n\n`)
-    }
-  }, [replyTo])
 
   // Auto-save draft every 30 seconds
   useEffect(() => {
@@ -150,23 +138,16 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
       setSubject('')
       setBody('')
       setAttachments([])
-    } catch (err: any) {
-      console.error('Send error:', err)
-      toast.error('Failed to send', { description: err.message })
-      setSendError(err.message || 'Failed to send email')
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to send email'
+      console.error('Send error:', error)
+      toast.error('Failed to send', { description: message })
+      setSendError(message)
     } finally {
       toast.dismiss(loadingToast)
       setIsSending(false)
     }
-  }, [to, subject, body, attachments, onClose])
-
-  const handleDiscard = useCallback(() => {
-    onClose()
-    setTo([])
-    setSubject('')
-    setBody('')
-    setAttachments([])
-  }, [onClose])
+  }, [to, subject, body, onClose])
 
   const handleSaveDraft = useCallback(() => {
     const draft: Draft = {
