@@ -37,7 +37,7 @@ export function MessageView({ onReply, onForward }: MessageViewProps) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full w-full min-w-0 flex-1">
       <MessageHeader onReply={onReply} onForward={onForward} />
       <MessageBody />
     </div>

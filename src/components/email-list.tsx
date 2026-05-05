@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { TestEmailButton } from '@/components/test-email-button'
 
 export function EmailList() {
   const {
@@ -36,6 +37,7 @@ export function EmailList() {
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
         </Button>
+        <TestEmailButton />
         <div className="flex-1 relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input

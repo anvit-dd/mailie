@@ -80,9 +80,19 @@ function decodeHtmlEntities(value: string): string {
 
 export function stripHtml(html: string): string {
   return decodeHtmlEntities(html)
+    // Replace block-level tags with newlines so paragraph structure is preserved
+    .replace(/<\/(p|div|br|li|tr|h[1-6])[^>]*>/gi, '\n')
+    // Remove all remaining HTML tags
     .replace(/<[^>]*>/g, ' ')
-    .replace(/&[a-z]+;/gi, ' ')
+    // Collapse numeric HTML entities (&#39;, &#x27;) to a space
+    .replace(/&#[a-z0-9]+;/gi, ' ')
+    // Collapse runs of whitespace into single spaces
     .replace(/\s+/g, ' ')
+    // Strip leading/trailing whitespace from each line, then normalize line breaks
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join('\n')
     .trim()
 }
 

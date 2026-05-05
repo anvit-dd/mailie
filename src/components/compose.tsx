@@ -36,7 +36,11 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
   const [subject, setSubject] = useState(
     replyTo?.subject ? (replyTo.subject.startsWith('Re:') ? replyTo.subject : `Re: ${replyTo.subject}`) : ''
   )
-  const [body, setBody] = useState(replyTo?.body ? `\n\n--- Original Message ---\n${replyTo.body}\n\n` : '')
+  const [body, setBody] = useState(
+    replyTo?.body
+      ? `\n\n--- Original Message ---\n${replyTo.body.replace(/^--- Original Message ---\s*/i, '').trim()}\n\n`
+      : ''
+  )
   const [attachments, setAttachments] = useState<File[]>([])
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -122,7 +126,13 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
       const res = await fetch('/api/gmail/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, subject, body: body }),
+        body: JSON.stringify({
+          to,
+          subject,
+          body,
+          inReplyTo: replyTo?.inReplyTo,
+          references: replyTo?.references,
+        }),
       })
 
       if (!res.ok) {

@@ -50,8 +50,8 @@ export function MessageSheet({ onReply, onForward }: MessageSheetProps) {
           </span>
         </div>
 
-        {/* Message content */}
-        <div className="flex-1 overflow-hidden">
+        {/* Message content — must allow scrolling on mobile */}
+        <div className="flex-1 overflow-y-auto">
           <MessageView onReply={onReply} onForward={onForward} />
         </div>
       </SheetContent>

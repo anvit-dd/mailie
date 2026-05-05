@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
+import { useEmail } from '@/contexts/email-context'
 import { Sidebar } from '@/components/sidebar'
 import { MobileNav } from '@/components/mobile-nav'
 import { EmailList } from '@/components/email-list'
@@ -13,6 +14,7 @@ import { Loader2 } from 'lucide-react'
 
 export default function Home() {
   const { isAuthenticated, isLoading, login } = useAuth()
+  const { selectedEmail } = useEmail()
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [composeNonce, setComposeNonce] = useState(0)
   const [replyTo, setReplyTo] = useState<ComposeProps['replyTo'] | undefined>()
@@ -28,7 +30,16 @@ export default function Home() {
   }
 
   const handleReply = () => {
-    setReplyTo(undefined)
+    if (!selectedEmail) return
+    setReplyTo({
+      to: selectedEmail.from.email,
+      subject: selectedEmail.subject.startsWith('Re:')
+        ? selectedEmail.subject
+        : `Re: ${selectedEmail.subject}`,
+      body: selectedEmail.bodyPlain || selectedEmail.body,
+      inReplyTo: selectedEmail.inReplyTo || selectedEmail.headers?.['Message-ID'] || undefined,
+      references: selectedEmail.references?.join(' ') || selectedEmail.headers?.['References'] || undefined,
+    })
     setComposeNonce((value) => value + 1)
     setIsComposeOpen(true)
   }

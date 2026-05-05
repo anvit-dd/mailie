@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, getAccountWithTokens } from '@/lib/session'
 import { escapeHtml, extractBody, type GmailMessage } from '@/lib/gmail-utils'
+import { sanitizeAndProxyEmailHtml } from '@/lib/gmail-sanitize'
 
 export async function GET(request: NextRequest) {
   const sessionId = request.cookies.get('session')?.value
@@ -39,8 +40,9 @@ export async function GET(request: NextRequest) {
     const message = (await response.json()) as GmailMessage
     const { body, bodyPlain } = extractBody(message.payload)
     const htmlBody = body || (bodyPlain ? `<pre style="white-space: pre-wrap;">${escapeHtml(bodyPlain)}</pre>` : '')
+    const sanitizedHtml = htmlBody ? sanitizeAndProxyEmailHtml(htmlBody) : ''
 
-    return NextResponse.json({ html: htmlBody })
+    return NextResponse.json({ html: sanitizedHtml })
   } catch (error) {
     console.error('Email fetch error:', error)
     return NextResponse.json({ error: 'Error loading email' }, { status: 500 })

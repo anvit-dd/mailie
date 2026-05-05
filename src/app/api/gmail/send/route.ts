@@ -28,8 +28,10 @@ export async function POST(request: NextRequest) {
   lines.push('MIME-Version: 1.0')
   if (inReplyTo) lines.push(`In-Reply-To: ${inReplyTo}`)
   if (references) lines.push(`References: ${references}`)
+  // Convert plain-text newlines to <br> for HTML rendering
+  const htmlBody = emailBody.replace(/\n/g, '<br>')
   lines.push('')
-  lines.push(emailBody)
+  lines.push(htmlBody)
 
   const raw = Buffer.from(lines.join('\r\n'))
     .toString('base64')
