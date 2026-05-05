@@ -18,6 +18,7 @@ interface EmailContextType {
   error: string | null
   searchQuery: string
   setSearchQuery: (query: string) => void
+  pendingEmailId: string | null
   setSelectedEmail: (email: EmailDetail | null) => void
   setCurrentFolder: (folder: Folder) => void
   refreshEmails: () => Promise<void>
@@ -61,6 +62,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [pendingEmailId, setPendingEmailId] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Draft[]>(() => readStoredDrafts())
 
   const refreshEmails = useCallback(async () => {
@@ -100,6 +102,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   }, [currentFolder.id, searchQuery])
 
   const loadEmailDetail = useCallback(async (id: string) => {
+    // Optimistic: immediately mark this email as pending so the list highlights it right away
+    setPendingEmailId(id)
     setIsLoading(true)
     setError(null)
 
@@ -126,6 +130,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       setError(getErrorMessage(error))
     } finally {
       setIsLoading(false)
+      setPendingEmailId(null)
     }
   }, [])
 
@@ -189,6 +194,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
         error,
         searchQuery,
         setSearchQuery,
+        pendingEmailId,
         setSelectedEmail,
         setCurrentFolder,
         refreshEmails,

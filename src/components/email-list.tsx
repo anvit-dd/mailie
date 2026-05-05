@@ -20,6 +20,7 @@ export function EmailList() {
     currentFolder,
     searchQuery,
     setSearchQuery,
+    pendingEmailId,
   } = useEmail()
 
   useEffect(() => {
@@ -77,7 +78,7 @@ export function EmailList() {
               <EmailListItem
                 key={email.id}
                 email={email}
-                isSelected={selectedEmail?.id === email.id}
+                isSelected={selectedEmail?.id === email.id || pendingEmailId === email.id}
                 onClick={() => loadEmailDetail(email.id)}
               />
             ))}

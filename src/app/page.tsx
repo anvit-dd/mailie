@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useEmail } from '@/contexts/email-context'
 import { Sidebar } from '@/components/sidebar'
@@ -12,12 +12,50 @@ import { Compose } from '@/components/compose'
 import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
 
+const DEFAULT_LIST_WIDTH = 320
+const MIN_LIST_WIDTH = 200
+const MAX_LIST_WIDTH = 600
+
 export default function Home() {
   const { isAuthenticated, isLoading, login } = useAuth()
   const { selectedEmail } = useEmail()
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [composeNonce, setComposeNonce] = useState(0)
   const [replyTo, setReplyTo] = useState<ComposeProps['replyTo'] | undefined>()
+  const [listWidth, setListWidth] = useState(DEFAULT_LIST_WIDTH)
+  const isDragging = useRef(false)
+  const dragStartX = useRef(0)
+  const dragStartWidth = useRef(0)
+
+  // Handle drag resize of the email list
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    isDragging.current = true
+    dragStartX.current = e.clientX
+    dragStartWidth.current = listWidth
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [listWidth])
+
+  useEffect(() => {
+    function handleMouseMove(e: MouseEvent) {
+      if (!isDragging.current) return
+      const delta = e.clientX - dragStartX.current
+      const newWidth = Math.min(MAX_LIST_WIDTH, Math.max(MIN_LIST_WIDTH, dragStartWidth.current + delta))
+      setListWidth(newWidth)
+    }
+    function handleMouseUp() {
+      if (!isDragging.current) return
+      isDragging.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
 
   interface ComposeProps {
     replyTo?: {
@@ -137,10 +175,16 @@ export default function Home() {
 
         {/* Email list + message view stacked on mobile */}
         <div className="flex flex-1 min-h-0">
-          {/* Email list — full width on mobile, fixed 320px on desktop */}
-          <div className="w-full md:w-[320px] shrink-0">
+          {/* Email list — full width on mobile, resizable on desktop */}
+          <div className="shrink-0" style={{ width: listWidth }}>
             <EmailList />
           </div>
+
+          {/* Drag handle */}
+          <div
+            className="hidden md:block w-1 hover:bg-accent/50 cursor-col-resize transition-colors shrink-0"
+            onMouseDown={handleDragStart}
+          />
 
           {/* Message view — desktop only (mobile uses MessageSheet) */}
           <div className="hidden md:flex flex-1 min-w-0">
