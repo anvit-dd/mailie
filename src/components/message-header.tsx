@@ -38,46 +38,38 @@ export function MessageHeader({ onReply, onForward, hideSubject }: MessageHeader
   }
 
   return (
-    <div className="border-b border-border bg-surface p-4">
+    <div className="border-b border-border bg-surface p-3 md:p-4">
       {!hideSubject && (
-        <h2 className="font-mono text-lg font-semibold mb-3">
+        <h2 className="font-mono text-base md:text-lg font-semibold mb-2 md:mb-3">
           {selectedEmail.subject || '(no subject)'}
         </h2>
       )}
 
       {/* Sender info */}
-      <div className="flex items-start gap-3 mb-3">
-        <div className="w-10 h-10 rounded-sm bg-accent/10 flex items-center justify-center shrink-0">
-          <span className="font-mono text-sm text-accent font-semibold">
+      <div className="flex items-start gap-2 md:gap-3 mb-2 md:mb-3">
+        <div className="w-8 h-8 md:w-10 md:h-10 rounded-sm bg-accent/10 flex items-center justify-center shrink-0">
+          <span className="font-mono text-xs md:text-sm text-accent font-semibold">
             {(selectedEmail.from.name || selectedEmail.from.email).charAt(0).toUpperCase()}
           </span>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-semibold">
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className="font-mono text-xs md:text-sm font-semibold truncate max-w-[120px] md:max-w-none">
               {selectedEmail.from.name || selectedEmail.from.email}
             </span>
-            <span className="font-mono text-xs text-muted-foreground">
-              &lt;{selectedEmail.from.email}&gt;
+            <span className="font-mono text-[10px] md:text-xs text-muted-foreground truncate max-w-[100px] md:max-w-none">
+              {selectedEmail.from.email}
             </span>
-          </div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="font-mono text-xs text-muted-foreground">
-              to{' '}
-              {selectedEmail.to.length === 1
-                ? selectedEmail.to[0].name || selectedEmail.to[0].email
-                : `${selectedEmail.to.length} recipients`}
-            </span>
-            <span className="font-mono text-xs text-muted-foreground">
-              · {formatDate(selectedEmail.date)}
+            <span className="font-mono text-[10px] md:text-xs text-muted-foreground ml-auto shrink-0">
+              {formatDate(selectedEmail.date)}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Labels */}
+      {/* Labels — desktop only */}
       {selectedEmail.labels.length > 0 && (
-        <div className="flex gap-1 mb-3">
+        <div className="hidden md:flex gap-1 mb-3">
           {selectedEmail.labels.map((label) => (
             <Badge
               key={label}
@@ -142,25 +134,27 @@ export function MessageHeader({ onReply, onForward, hideSubject }: MessageHeader
         )}
       </div>
 
-      {/* Expandable headers */}
-      {showAllHeaders && (
-        <div className="mt-3 p-3 bg-background rounded-sm border border-border">
-          <p className="font-mono text-xs text-muted-foreground mb-1">Headers</p>
-          {Object.entries(selectedEmail.headers).map(([key, value]) => (
-            <div key={key} className="font-mono text-xs">
-              <span className="text-muted-foreground">{key}: </span>
-              <span className="break-all">{value}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <button
-        onClick={() => setShowAllHeaders(!showAllHeaders)}
-        className="mt-2 font-mono text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-      >
-        <ChevronDown className={`w-3 h-3 transition-transform ${showAllHeaders ? 'rotate-180' : ''}`} />
-        {showAllHeaders ? 'Hide details' : 'Show details'}
-      </button>
+      {/* Expandable headers — desktop only */}
+      <div className="hidden md:block">
+        {showAllHeaders && (
+          <div className="mt-3 p-3 bg-background rounded-sm border border-border">
+            <p className="font-mono text-xs text-muted-foreground mb-1">Headers</p>
+            {Object.entries(selectedEmail.headers).map(([key, value]) => (
+              <div key={key} className="font-mono text-xs">
+                <span className="text-muted-foreground">{key}: </span>
+                <span className="break-all">{value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => setShowAllHeaders(!showAllHeaders)}
+          className="mt-2 font-mono text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+        >
+          <ChevronDown className={`w-3 h-3 transition-transform ${showAllHeaders ? 'rotate-180' : ''}`} />
+          {showAllHeaders ? 'Hide details' : 'Show details'}
+        </button>
+      </div>
     </div>
   )
 }
