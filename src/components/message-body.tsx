@@ -83,9 +83,12 @@ function buildSrcdoc(html: string): string {
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="script-src 'none'; frame-src 'none'; object-src 'none'; img-src 'self' https: data:;">
   <style>
     ${EMAIL_VIEWER_CSS}
+    body { max-width: 100vw; overflow-x: hidden; }
+    table, td, img, div, span { max-width: 100% !important; }
   </style>
   ${HEIGHT_MEASUREMENT_SCRIPT}
 </head>

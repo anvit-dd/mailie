@@ -178,7 +178,7 @@ export default function Home() {
         {/* Email list + message view stacked on mobile */}
         <div className="flex flex-1 min-h-0">
           {/* Email list — full width on mobile, resizable on desktop */}
-          <div className="shrink-0" style={{ width: listWidth }}>
+          <div className="shrink-0 min-w-0" style={{ width: `clamp(200px, ${listWidth}px, 100%)` }}>
             <EmailList />
           </div>
 
