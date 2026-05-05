@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const message = (await response.json()) as GmailMessage
     const { body, bodyPlain } = extractBody(message.payload)
     const htmlBody = body || (bodyPlain ? `<pre style="white-space: pre-wrap;">${escapeHtml(bodyPlain)}</pre>` : '')
-    const sanitizedHtml = htmlBody ? sanitizeAndProxyEmailHtml(htmlBody) : ''
+    const sanitizedHtml = htmlBody ? sanitizeAndProxyEmailHtml(htmlBody, messageId) : ''
 
     return NextResponse.json({ html: sanitizedHtml })
   } catch (error) {
