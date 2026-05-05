@@ -7,7 +7,7 @@ import { Sidebar } from '@/components/sidebar'
 import { MobileNav } from '@/components/mobile-nav'
 import { EmailList } from '@/components/email-list'
 import { MessageView } from '@/components/message-view'
-import { MessageSheet } from '@/components/message-sheet'
+import { MobileEmailView } from '@/components/mobile-email-view'
 import { Compose } from '@/components/compose'
 import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
@@ -159,15 +159,29 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-background">
-      {/* Desktop sidebar — hidden on mobile */}
+      {/* Desktop sidebar */}
       <div className="hidden md:flex">
         <Sidebar onCompose={handleCompose} />
       </div>
 
-      {/* Mobile: hamburger nav + email list side by side */}
-      <div className="flex flex-col flex-1 min-w-0">
-        {/* Top bar for mobile */}
-        <div className="flex items-center gap-2 p-3 border-b border-border md:hidden bg-surface">
+      {/* Desktop: email list + message view */}
+      <div className="hidden md:flex flex-1 min-w-0">
+        <div className="shrink-0 min-w-0" style={{ width: listWidth }}>
+          <EmailList />
+        </div>
+        <div
+          className="w-1 hover:bg-accent/50 cursor-col-resize transition-colors shrink-0"
+          onMouseDown={handleDragStart}
+        />
+        <div className="flex-1 min-w-0">
+          <MessageView onReply={handleReply} onForward={handleForward} />
+        </div>
+      </div>
+
+      {/* Mobile: full-screen email list OR full-screen email */}
+      <div className="flex flex-col flex-1 min-w-0 md:hidden">
+        {/* Mobile top bar */}
+        <div className="flex items-center gap-2 p-3 border-b border-border bg-surface shrink-0">
           <MobileNav onCompose={handleCompose} />
           <span className="font-mono text-base font-bold tracking-tight">
             <span className="text-accent">mailie</span>
@@ -175,28 +189,9 @@ export default function Home() {
           </span>
         </div>
 
-        {/* Email list + message view stacked on mobile */}
-        <div className="flex flex-1 min-h-0">
-          {/* Email list — full width on mobile, resizable on desktop */}
-          <div className="shrink-0 min-w-0" style={{ width: `clamp(200px, ${listWidth}px, 100%)` }}>
-            <EmailList />
-          </div>
-
-          {/* Drag handle */}
-          <div
-            className="hidden md:block w-1 hover:bg-accent/50 cursor-col-resize transition-colors shrink-0"
-            onMouseDown={handleDragStart}
-          />
-
-          {/* Message view — desktop only (mobile uses MessageSheet) */}
-          <div className="hidden md:flex flex-1 min-w-0">
-            <MessageView onReply={handleReply} onForward={handleForward} />
-          </div>
-        </div>
+        {/* Mobile email list + full-screen email */}
+        <MobileEmailView onReply={handleReply} onForward={handleForward} />
       </div>
-
-      {/* Mobile: message opens as full-screen sheet */}
-      <MessageSheet onReply={handleReply} onForward={handleForward} />
 
       {/* Compose Dialog */}
       <Compose
