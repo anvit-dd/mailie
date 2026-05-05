@@ -207,7 +207,12 @@ export function gmailMessageToEmail(message: GmailMessage): Email {
     from,
     to: toHeader.split(',').map((recipient) => parseEmailAddress(recipient.trim())),
     subject: subject || '(no subject)',
-    preview: bodyPlain.slice(0, 120),
+    preview: (() => {
+      // Extract only the NEW content (after last --- Original Message ---) for the preview
+      const parts = bodyPlain.split(/--- Original Message ---\s*/i)
+      const latestContent = parts[parts.length - 1].trim()
+      return latestContent.slice(0, 120)
+    })(),
     date: new Date(dateStr),
     isRead: !labelIds.includes('UNREAD'),
     isStarred: labelIds.includes('STARRED'),

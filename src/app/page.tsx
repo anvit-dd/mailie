@@ -75,7 +75,14 @@ export default function Home() {
       subject: selectedEmail.subject.startsWith('Re:')
         ? selectedEmail.subject
         : `Re: ${selectedEmail.subject}`,
-      body: selectedEmail.bodyPlain || selectedEmail.body,
+      body: (() => {
+        // Only quote the NEW content of this email (after the last --- Original Message --- separator)
+        // bodyPlain contains the FULL email including any previously quoted content
+        // We don't want to re-quote the entire thread, just this message's fresh content
+        const parts = (selectedEmail.bodyPlain || selectedEmail.body || '').split(/--- Original Message ---\s*/i)
+        const lastPart = parts[parts.length - 1].trim()
+        return lastPart
+      })(),
       inReplyTo: selectedEmail.inReplyTo || selectedEmail.headers?.['Message-ID'] || undefined,
       references: selectedEmail.references?.join(' ') || selectedEmail.headers?.['References'] || undefined,
       threadId: selectedEmail.threadId,
