@@ -25,6 +25,7 @@ interface ComposeProps {
     body: string
     inReplyTo?: string
     references?: string
+    threadId?: string
   }
 }
 
@@ -132,6 +133,7 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
           body,
           inReplyTo: replyTo?.inReplyTo,
           references: replyTo?.references,
+          threadId: replyTo?.threadId,
         }),
       })
 

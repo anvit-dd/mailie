@@ -64,6 +64,7 @@ export default function Home() {
       body: string
       inReplyTo?: string
       references?: string
+      threadId?: string
     }
   }
 
@@ -77,6 +78,7 @@ export default function Home() {
       body: selectedEmail.bodyPlain || selectedEmail.body,
       inReplyTo: selectedEmail.inReplyTo || selectedEmail.headers?.['Message-ID'] || undefined,
       references: selectedEmail.references?.join(' ') || selectedEmail.headers?.['References'] || undefined,
+      threadId: selectedEmail.threadId,
     })
     setComposeNonce((value) => value + 1)
     setIsComposeOpen(true)

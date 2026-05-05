@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   if (!account?.gmailTokens) return NextResponse.json({ error: 'No Gmail connection' }, { status: 401 })
 
   const body = await request.json()
-  const { to, subject, body: emailBody, cc, bcc, inReplyTo, references } = body
+  const { to, subject, body: emailBody, cc, bcc, inReplyTo, references, threadId } = body
 
   if (!to || !subject || !emailBody) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -39,13 +39,16 @@ export async function POST(request: NextRequest) {
     .replace(/\//g, '_')
     .replace(/=+$/, '')
 
+  const payload: Record<string, unknown> = { raw }
+  if (threadId) payload.threadId = threadId
+
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${account.gmailTokens.access_token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ raw }),
+    body: JSON.stringify(payload),
   })
 
   if (!response.ok) {
