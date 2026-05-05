@@ -20,6 +20,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     name TEXT,
+    picture TEXT,
     created_at INTEGER NOT NULL
   );
 
@@ -43,6 +44,7 @@ export interface Account {
   id: string
   email: string
   name: string | null
+  picture?: string | null
   created_at: number
 }
 

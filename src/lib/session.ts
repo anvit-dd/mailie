@@ -41,10 +41,10 @@ export function deleteAccountSessions(accountId: string): void {
   db.prepare(`DELETE FROM sessions WHERE account_id = ?`).run(accountId)
 }
 
-export function getOrCreateAccount(email: string, name: string | null, accessToken: string, refreshToken: string | null, expiresAt: number): Account {
+export function getOrCreateAccount(email: string, name: string | null, accessToken: string, refreshToken: string | null, expiresAt: number, picture?: string | null): Account {
   const existing = db.prepare(`SELECT * FROM accounts WHERE email = ?`).get(email) as Account | undefined
   if (existing) {
-    // Update tokens
+    // Update tokens + picture
     db.prepare(`
       INSERT INTO gmail_tokens (account_id, access_token, refresh_token, expires_at, updated_at)
       VALUES (?, ?, ?, ?, ?)
@@ -54,18 +54,22 @@ export function getOrCreateAccount(email: string, name: string | null, accessTok
         expires_at = excluded.expires_at,
         updated_at = excluded.updated_at
     `).run(existing.id, accessToken, refreshToken, expiresAt, Date.now())
-    return existing
+    // Update picture if provided
+    if (picture !== undefined) {
+      db.prepare(`UPDATE accounts SET name = ?, picture = ? WHERE id = ?`).run(name, picture, existing.id)
+    }
+    return { ...existing, name: name ?? existing.name, picture: picture ?? existing.picture }
   }
 
   const id = randomBytes(16).toString('hex')
   const createdAt = Date.now()
 
-  db.prepare(`INSERT INTO accounts (id, email, name, created_at) VALUES (?, ?, ?, ?)`).run(id, email, name, createdAt)
+  db.prepare(`INSERT INTO accounts (id, email, name, picture, created_at) VALUES (?, ?, ?, ?, ?)`).run(id, email, name, picture ?? null, createdAt)
 
   db.prepare(`
     INSERT INTO gmail_tokens (account_id, access_token, refresh_token, expires_at, updated_at)
     VALUES (?, ?, ?, ?, ?)
   `).run(id, accessToken, refreshToken, expiresAt, Date.now())
 
-  return { id, email, name, created_at: createdAt }
+  return { id, email, name: name ?? null, picture: picture ?? null, created_at: createdAt }
 }

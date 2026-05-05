@@ -79,28 +79,40 @@ const HEIGHT_MEASUREMENT_SCRIPT = `
 `
 
 function buildSrcdoc(html: string): string {
-  return `<!DOCTYPE html>
+  // Emails are full HTML documents with <html>, <head>, <body>.
+  // Inject the complete sanitized HTML directly as the iframe content so all
+  // CSS selectors (body > .container, html body .card, etc.) remain valid.
+  // Only inject our viewer CSS + viewport meta as an OVERLAY — prepend our
+  // styles to <head> so they cascade correctly without breaking email selectors.
+  //
+  // The approach: parse the email HTML, prepend our viewer CSS to <head>, then
+  // return the full document string as srcdoc.
+  try {
+    const parser = new DOMParser()
+    const document = parser.parseFromString(html, 'text/html')
+    const headEl = document.querySelector('head')
+    if (headEl) {
+      // Prepend our viewer CSS to <head> (it cascades before email styles)
+      const viewerStyle = document.createElement('style')
+      viewerStyle.textContent = EMAIL_VIEWER_CSS
+      headEl.insertBefore(viewerStyle, headEl.firstChild)
+    }
+    const fullDoc = '<!DOCTYPE html>\n' + document.documentElement.outerHTML
+    // Inject height measurement script by inserting it before </body>
+    return fullDoc.replace('</body>', `${HEIGHT_MEASUREMENT_SCRIPT}</body>`)
+  } catch {
+    // Fallback: return as-is
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta http-equiv="Content-Security-Policy" content="script-src 'none'; frame-src 'none'; object-src 'none'; img-src 'self' https: data:;">
-  <style>
-    ${EMAIL_VIEWER_CSS}
-    *, *::before, *::after { box-sizing: border-box !important; }
-    html { width: 100% !important; }
-    body { max-width: 100vw !important; overflow-x: hidden !important; width: 100% !important; }
-    table { width: 100% !important; table-layout: fixed !important; }
-    td { max-width: 100% !important; overflow: hidden !important; word-break: break-word !important; }
-    img { max-width: 100% !important; height: auto !important; display: block !important; }
-    div, span, p, li { max-width: 100% !important; overflow: hidden !important; }
-    a { overflow: hidden !important; }
-    center { width: 100% !important; }
-  </style>
-  ${HEIGHT_MEASUREMENT_SCRIPT}
+  <style>${EMAIL_VIEWER_CSS}</style>
 </head>
 <body>${html}</body>
-</html>`
+</html>`.replace('</body>', `${HEIGHT_MEASUREMENT_SCRIPT}</body>`)
+  }
 }
 
 function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: EmailDetail; noPadding?: boolean }) {
@@ -129,7 +141,15 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
 
   // Fetch email body HTML when a new email is selected
   useEffect(() => {
-    if (!selectedEmail.body) {
+    // Reset state for new email
+    setEmailHtml(null)
+    setIsLoading(true)
+    setError(null)
+    setIframeHeight(undefined)
+
+    if (!selectedEmail.body && !selectedEmail.bodyPlain) {
+      // Nothing to show
+      setIsLoading(false)
       return
     }
 
@@ -153,7 +173,7 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
       })
 
     return () => controller.abort()
-  }, [selectedEmail.id, selectedEmail.body])
+  }, [selectedEmail.id])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

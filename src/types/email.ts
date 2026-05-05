@@ -29,7 +29,7 @@ export interface Email {
 export interface EmailDetail extends Email {
   body: string
   bodyPlain: string
-  bodyHtml?: string // Used by test emails to store HTML directly
+  bodyHtml?: string
   attachments: Attachment[]
   headers: Record<string, string>
   references?: string[]

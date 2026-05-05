@@ -32,7 +32,22 @@ export async function GET(request: NextRequest) {
 
     const tokens = await tokenResponse.json()
 
-    // Get user profile
+    // Get user profile info + avatar from People API
+    let picture: string | undefined
+    try {
+      const peopleResponse = await fetch(
+        'https://people.googleapis.com/v1/people/me?personFields=photos,names',
+        { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+      )
+      if (peopleResponse.ok) {
+        const people = await peopleResponse.json()
+        picture = people.photos?.[0]?.url
+      }
+    } catch {
+      // Non-fatal — avatar is optional
+    }
+
+    // Get Gmail profile (email)
     const profileResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     })
@@ -44,13 +59,14 @@ export async function GET(request: NextRequest) {
     const profile = await profileResponse.json()
     const expiresAt = Date.now() + tokens.expires_in * 1000
 
-    // Upsert account + tokens
+    // Upsert account + tokens + picture
     const account = getOrCreateAccount(
       profile.emailAddress,
       profile.emailAddress.split('@')[0],
       tokens.access_token,
       tokens.refresh_token,
-      expiresAt
+      expiresAt,
+      picture
     )
 
     // Create session

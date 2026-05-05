@@ -11,15 +11,7 @@ interface MessageViewProps {
 }
 
 export function MessageView({ onReply, onForward }: MessageViewProps) {
-  const { selectedEmail, isLoading } = useEmail()
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
+  const { selectedEmail } = useEmail()
 
   if (!selectedEmail) {
     return (

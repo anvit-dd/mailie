@@ -10,6 +10,10 @@ const DOMPurify = createDOMPurify(domWindow as never)
  * - https://  → /api/gmail/proxy?url=<encoded>
  * - http://   → /api/gmail/proxy?url=<encoded>  (avoids browser mixed-content blocking)
  * - cid:     → /api/gmail/proxy?cid=<value>&messageId=<id>  (inline attachments, fetch via Gmail API)
+ *
+ * IMPORTANT: returns the FULL document HTML (not just body.innerHTML) so that
+ * <head> content (viewport meta, <style> blocks, etc.) is preserved. If we return
+ * only body.innerHTML, the email's entire CSS is lost before buildSrcdoc() runs.
  */
 function proxyImageUrls(html: string, messageId?: string): string {
   const dom = new JSDOM(html)
@@ -34,12 +38,20 @@ function proxyImageUrls(html: string, messageId?: string): string {
     }
   })
 
-  return document.body.innerHTML
+  // Return the FULL document so <head> and all its contents are preserved.
+  // JSDOM always produces a complete document structure even if the input was
+  // a body-only fragment, so outerHTML gives us the complete HTML with <html>/<head>/<body>.
+  return document.documentElement.outerHTML
 }
 
 export function sanitizeAndProxyEmailHtml(html: string, messageId?: string): string {
   const sanitized = DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
+    // Allow <style> tags and inline style attributes so email CSS (background-color,
+    // border-radius, padding, etc.) survives sanitization. DOMPurify strips these by
+    // default even with html:true profile.
+    ADD_TAGS: ['style'],
+    ADD_ATTR: ['style'],
   })
 
   return proxyImageUrls(sanitized, messageId)

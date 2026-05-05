@@ -7,13 +7,13 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { TestEmailButton } from '@/components/test-email-button'
+
 
 export function EmailList() {
   const {
     emails,
     selectedEmail,
-    isLoading,
+    isLoadingList,
     refreshEmails,
     loadEmailDetail,
     setSelectedEmail,
@@ -27,19 +27,14 @@ export function EmailList() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleSearchChange = (value: string) => {
-    // Update input value immediately
     setSearchQuery(value)
-    // Debounce the API call
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      refreshEmails()
-    }, 300)
+    // Debounce the API call — searchQuery dep in useEffect handles the actual fetch
   }
 
   useEffect(() => {
     setSelectedEmail(null)
     refreshEmails()
-  }, [currentFolder.id, refreshEmails, setSelectedEmail])
+  }, [currentFolder.id, searchQuery])
 
   return (
     <div className="flex flex-col h-full border-r border-border bg-background">
@@ -51,9 +46,8 @@ export function EmailList() {
           onClick={() => refreshEmails()}
           className="h-8 w-8"
         >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${isLoadingList ? 'animate-spin' : ''}`} />
         </Button>
-        <TestEmailButton />
         <div className="flex-1 relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -75,7 +69,7 @@ export function EmailList() {
 
       {/* Email list */}
       <ScrollArea className="flex-1 min-h-0">
-        {isLoading && emails.length === 0 ? (
+        {isLoadingList && emails.length === 0 ? (
           <div className="flex items-center justify-center h-32">
             <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
           </div>

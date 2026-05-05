@@ -1,9 +1,33 @@
 import type { Attachment, Email, EmailAddress, EmailDetail, Folder } from '@/types/email'
-import { createHash } from 'crypto'
 
-export function getGravatarUrl(email: string, size = 64): string {
-  const hash = createHash('md5').update(email.toLowerCase().trim()).digest('hex')
-  return `https://www.gravatar.com/avatar/${hash}?s=${size}&d=404`
+// Fetch a person's profile photo by email address using people.searchDirectoryPeople.
+// This searches the Google Workspace directory (for WORK emails) and Google Profiles.
+// Falls back to null if the person is not found or has no photo — callers should fall
+// back to initials in that case.
+export async function getAvatarByEmail(email: string, accessToken: string): Promise<string | null> {
+  try {
+    const params = new URLSearchParams({
+      query: email,
+      readMask: 'photos,emailAddresses',
+      mergePersonFields: 'true',
+      requestSyncToken: 'false',
+      skipUnreadable: 'true',
+    })
+    const response = await fetch(`https://people.googleapis.com/v1/people:searchDirectoryPeople?${params}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    })
+    if (!response.ok) return null
+    const data = await response.json()
+    const person = data.people?.[0]
+    if (!person) return null
+    const photo = person.photos?.find((p: { url: string }) => p.url)
+    return photo?.url ?? null
+  } catch {
+    return null
+  }
 }
 
 export interface GmailMessageHeader {
@@ -233,9 +257,6 @@ export function gmailMessageToDetail(message: GmailMessage): EmailDetail {
   const headers = message.payload?.headers ?? []
   const subject = getHeader(headers, 'Subject')
   const fromAddress = parseEmailAddress(getHeader(headers, 'From'))
-  if (fromAddress.email) {
-    fromAddress.avatarUrl = getGravatarUrl(fromAddress.email)
-  }
   const toHeader = getHeader(headers, 'To')
   const dateStr = getHeader(headers, 'Date')
   const references = getHeader(headers, 'References')

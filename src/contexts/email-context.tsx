@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useCallback } from 'react'
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import type { Draft, Email, EmailDetail, Folder } from '@/types/email'
 import {
   gmailMessageToDetail,
@@ -14,7 +14,8 @@ interface EmailContextType {
   selectedEmail: EmailDetail | null
   currentFolder: Folder
   folders: Folder[]
-  isLoading: boolean
+  isLoadingList: boolean
+  isLoadingEmail: boolean
   error: string | null
   searchQuery: string
   setSearchQuery: (query: string) => void
@@ -27,6 +28,7 @@ interface EmailContextType {
   saveDraft: (draft: Draft) => void
   deleteDraft: (id: string) => void
   updateDraft: (id: string, draft: Partial<Draft>) => void
+  avatarMap: Record<string, string>
 }
 
 const EmailContext = createContext<EmailContextType | undefined>(undefined)
@@ -59,18 +61,45 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     unreadCount: 0,
   })
   const folders = getFolders()
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingList, setIsLoadingList] = useState(false)
+  const [isLoadingEmail, setIsLoadingEmail] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [pendingEmailId, setPendingEmailId] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Draft[]>(() => readStoredDrafts())
+  const [avatarMap, setAvatarMap] = useState<Record<string, string>>({})
+
+  // Cache full GmailMessage objects to avoid re-fetching when opening emails
+  const [emailCache, setEmailCache] = useState<Record<string, GmailMessage>>({})
+  // Keep a ref in sync with cache so loadEmailDetail can read it without needing it in deps
+  const emailCacheRef = useRef<Record<string, GmailMessage>>({})
+  emailCacheRef.current = emailCache
+
+  // Ref to avoid searchQuery causing refreshEmails recreation on every keystroke
+  const searchQueryRef = useRef(searchQuery)
+  // Keep ref in sync with state
+  searchQueryRef.current = searchQuery
+
+  // Debounce ref — tracks the last query we actually fired an API call for
+  // Initialize with undefined sentinel so first call (empty string) always goes through
+  const lastFiredQueryRef = useRef<string | undefined>(undefined)
+
+  // Reset debounce when folder changes so navigation always fires
+  useEffect(() => {
+    lastFiredQueryRef.current = undefined
+  }, [currentFolder.id])
 
   const refreshEmails = useCallback(async () => {
-    setIsLoading(true)
+    // Debounce: skip if we've already fired for this exact query
+    const currentQuery = searchQueryRef.current
+    if (currentQuery === lastFiredQueryRef.current) return
+    lastFiredQueryRef.current = currentQuery
+    setIsLoadingList(true)
     setError(null)
 
     try {
-      const res = await fetch(`/api/gmail/messages?label=${currentFolder.id}&maxResults=25${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''}`)
+      // Step 1: get list of message IDs
+      const res = await fetch(`/api/gmail/messages?label=${currentFolder.id}&maxResults=25${searchQueryRef.current ? `&q=${encodeURIComponent(searchQueryRef.current)}` : ''}`)
       if (!res.ok) {
         throw new Error('Failed to fetch emails')
       }
@@ -78,17 +107,50 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       const data: { messages?: Array<{ id: string }> } = await res.json()
 
       if (data.messages && data.messages.length > 0) {
-        const emailDetails = await Promise.all(
-          data.messages.map(async (message) => {
-            const response = await fetch(`/api/gmail/messages?id=${message.id}`)
-            if (!response.ok) {
-              throw new Error('Failed to fetch email detail')
-            }
-            return (await response.json()) as GmailMessage
-          })
-        )
+        const messageIds = data.messages.map((m) => m.id)
 
-        setEmails(emailDetails.map(gmailMessageToEmail))
+        // Step 2: batch-fetch all full message objects in ONE request
+        const batchRes = await fetch('/api/gmail/messages/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: messageIds }),
+        })
+
+        if (!batchRes.ok) {
+          throw new Error('Failed to fetch email batch')
+        }
+
+        const { messages }: { messages: GmailMessage[] } = await batchRes.json()
+
+        // Cache all fetched messages using functional update to avoid stale closure
+        setEmailCache((prev) => {
+          const next = new Map(Object.entries(prev))
+          for (const msg of messages) {
+            next.set(msg.id, msg)
+          }
+          return Object.fromEntries(next)
+        })
+
+        setEmails(messages.map(gmailMessageToEmail))
+
+        // Fetch avatars for all unique sender emails in one batch call
+        const uniqueEmails = [...new Set(messages.map((m) => {
+          const fromHeader = m.payload?.headers?.find((h: { name: string; value: string }) => h.name.toLowerCase() === 'from')
+          const emailMatch = fromHeader?.value?.match(/<(.+?)>/)
+          return emailMatch ? emailMatch[1] : fromHeader?.value ?? ''
+        }).filter(Boolean))]
+
+        if (uniqueEmails.length > 0) {
+          try {
+            const avatarRes = await fetch(`/api/contacts/avatar?emails=${uniqueEmails.join(',')}`)
+            if (avatarRes.ok) {
+              const avatarData: Record<string, string> = await avatarRes.json()
+              setAvatarMap(avatarData)
+            }
+          } catch {
+            // Non-fatal — avatars are optional
+          }
+        }
       } else {
         setEmails([])
       }
@@ -97,25 +159,34 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       setError(getErrorMessage(error))
       setEmails([])
     } finally {
-      setIsLoading(false)
+      setIsLoadingList(false)
     }
-  }, [currentFolder.id, searchQuery])
+  }, [currentFolder.id])
 
   const loadEmailDetail = useCallback(async (id: string) => {
     // Optimistic: immediately mark this email as pending so the list highlights it right away
     setPendingEmailId(id)
-    setIsLoading(true)
+    setIsLoadingEmail(true)
     setError(null)
 
     try {
-      const res = await fetch(`/api/gmail/messages?id=${id}`)
-      if (!res.ok) {
-        throw new Error('Failed to load email')
+      // Check cache first — message was likely already fetched in refreshEmails
+      let message: GmailMessage | null = emailCacheRef.current[id] ?? null
+
+      if (!message) {
+        const res = await fetch(`/api/gmail/messages?id=${id}`)
+        if (!res.ok) {
+          throw new Error('Failed to load email')
+        }
+        message = (await res.json()) as GmailMessage
+
+        // Cache it for next time — functional update, no deps needed
+        setEmailCache((prev) => ({ ...prev, [id]: message! }))
       }
 
-      const message = (await res.json()) as GmailMessage
       const detail = gmailMessageToDetail(message)
 
+      // Mark as read (fire-and-forget)
       if (message.labelIds?.includes('UNREAD')) {
         fetch('/api/gmail/modify', {
           method: 'POST',
@@ -129,7 +200,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to load email:', error)
       setError(getErrorMessage(error))
     } finally {
-      setIsLoading(false)
+      setIsLoadingEmail(false)
       setPendingEmailId(null)
     }
   }, [])
@@ -190,7 +261,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
         selectedEmail,
         currentFolder,
         folders,
-        isLoading,
+        isLoadingList,
+        isLoadingEmail,
         error,
         searchQuery,
         setSearchQuery,
@@ -203,6 +275,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
         saveDraft,
         deleteDraft,
         updateDraft,
+        avatarMap,
       }}
     >
       {children}

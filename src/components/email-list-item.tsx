@@ -3,6 +3,7 @@
 import { Email } from '@/types/email'
 import { Badge } from '@/components/ui/badge'
 import { Paperclip, Star } from 'lucide-react'
+import { useEmail } from '@/contexts/email-context'
 
 function formatRelativeDate(date: Date): string {
   const now = new Date()
@@ -41,6 +42,9 @@ interface EmailListItemProps {
 }
 
 export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps) {
+  const { avatarMap } = useEmail()
+  const avatarUrl = avatarMap[email.from.email]
+
   return (
     <button
       onClick={onClick}
@@ -56,22 +60,20 @@ export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps
       <div className="flex items-start gap-2.5">
         {/* Sender avatar */}
         <div className="mt-0.5 shrink-0">
-          {email.from.avatarUrl ? (
+          {avatarUrl ? (
             <img
-              src={email.from.avatarUrl}
+              src={avatarUrl}
               alt={email.from.name || email.from.email}
               className={`w-8 h-8 rounded-full object-cover ${email.isRead ? 'opacity-60' : ''}`}
               onError={(e) => {
                 const target = e.currentTarget as HTMLImageElement
-                // Gravatar 404 — replace with initials fallback
-                if (target.src.includes('gravatar.com')) {
-                  const initial = (email.from.name || email.from.email).charAt(0).toUpperCase()
-                  const parent = target.parentElement
-                  if (parent) {
-                    parent.innerHTML = email.isRead
-                      ? `<div class="w-8 h-8 rounded-full bg-muted/30 flex items-center justify-center"><span class="font-mono text-[10px] text-muted-foreground font-semibold">${initial}</span></div>`
-                      : `<div class="w-8 h-8 rounded-full bg-accent/15 flex items-center justify-center"><span class="font-mono text-xs text-accent font-semibold">${initial}</span></div>`
-                  }
+                // People API returned a photo but it's broken — replace with initials
+                const initial = (email.from.name || email.from.email).charAt(0).toUpperCase()
+                const parent = target.parentElement
+                if (parent) {
+                  parent.innerHTML = email.isRead
+                    ? `<div class="w-8 h-8 rounded-full bg-muted/30 flex items-center justify-center"><span class="font-mono text-[10px] text-muted-foreground font-semibold">${initial}</span></div>`
+                    : `<div class="w-8 h-8 rounded-full bg-accent/15 flex items-center justify-center"><span class="font-mono text-xs text-accent font-semibold">${initial}</span></div>`
                 }
               }}
             />
