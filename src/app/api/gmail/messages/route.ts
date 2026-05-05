@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
   const pageToken = searchParams.get('pageToken') || undefined
   const maxResults = parseInt(searchParams.get('maxResults') || '25')
   const messageId = searchParams.get('id')
+  const q = searchParams.get('q') || undefined
 
   // Single message detail
   if (messageId) {
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest) {
     params.set('labelIds', labelMap[label] || label)
   }
   if (pageToken) params.set('pageToken', pageToken)
+  if (q) params.set('q', q)
 
   const response = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`,

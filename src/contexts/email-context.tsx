@@ -16,6 +16,8 @@ interface EmailContextType {
   folders: Folder[]
   isLoading: boolean
   error: string | null
+  searchQuery: string
+  setSearchQuery: (query: string) => void
   setSelectedEmail: (email: EmailDetail | null) => void
   setCurrentFolder: (folder: Folder) => void
   refreshEmails: () => Promise<void>
@@ -58,6 +60,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   const folders = getFolders()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
   const [drafts, setDrafts] = useState<Draft[]>(() => readStoredDrafts())
 
   const refreshEmails = useCallback(async () => {
@@ -65,7 +68,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     setError(null)
 
     try {
-      const res = await fetch(`/api/gmail/messages?label=${currentFolder.id}&maxResults=25`)
+      const res = await fetch(`/api/gmail/messages?label=${currentFolder.id}&maxResults=25${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''}`)
       if (!res.ok) {
         throw new Error('Failed to fetch emails')
       }
@@ -94,7 +97,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [currentFolder.id])
+  }, [currentFolder.id, searchQuery])
 
   const loadEmailDetail = useCallback(async (id: string) => {
     setIsLoading(true)
@@ -184,6 +187,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
         folders,
         isLoading,
         error,
+        searchQuery,
+        setSearchQuery,
         setSelectedEmail,
         setCurrentFolder,
         refreshEmails,

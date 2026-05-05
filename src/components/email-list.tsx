@@ -5,7 +5,7 @@ import { useEmail } from '@/contexts/email-context'
 import { EmailListItem } from './email-list-item'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Search } from 'lucide-react'
+import { RefreshCw, Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { TestEmailButton } from '@/components/test-email-button'
 
@@ -18,6 +18,8 @@ export function EmailList() {
     loadEmailDetail,
     setSelectedEmail,
     currentFolder,
+    searchQuery,
+    setSearchQuery,
   } = useEmail()
 
   useEffect(() => {
@@ -42,8 +44,18 @@ export function EmailList() {
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Search..."
-            className="h-8 pl-8 font-mono text-sm bg-surface"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-8 pl-8 pr-8 font-mono text-sm bg-surface"
           />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
         </div>
       </div>
 
