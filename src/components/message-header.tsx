@@ -17,9 +17,10 @@ import { useState } from 'react'
 interface MessageHeaderProps {
   onReply: () => void
   onForward: () => void
+  hideSubject?: boolean
 }
 
-export function MessageHeader({ onReply, onForward }: MessageHeaderProps) {
+export function MessageHeader({ onReply, onForward, hideSubject }: MessageHeaderProps) {
   const { selectedEmail } = useEmail()
   const [showAllHeaders, setShowAllHeaders] = useState(false)
 
@@ -38,10 +39,11 @@ export function MessageHeader({ onReply, onForward }: MessageHeaderProps) {
 
   return (
     <div className="border-b border-border bg-surface p-4">
-      {/* Subject */}
-      <h2 className="font-mono text-lg font-semibold mb-3">
-        {selectedEmail.subject || '(no subject)'}
-      </h2>
+      {!hideSubject && (
+        <h2 className="font-mono text-lg font-semibold mb-3">
+          {selectedEmail.subject || '(no subject)'}
+        </h2>
+      )}
 
       {/* Sender info */}
       <div className="flex items-start gap-3 mb-3">

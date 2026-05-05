@@ -25,7 +25,7 @@ export function MobileEmailView({ onReply, onForward }: MobileEmailViewProps) {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-background">
-      {/* Mobile top bar — back button */}
+      {/* Mobile top bar — back button + subject on same line */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-surface shrink-0">
         <Button
           variant="ghost"
@@ -35,10 +35,13 @@ export function MobileEmailView({ onReply, onForward }: MobileEmailViewProps) {
         >
           <ChevronLeft className="w-5 h-5" />
         </Button>
+        <span className="font-mono text-sm truncate flex-1">
+          {selectedEmail.subject || 'Email'}
+        </span>
       </div>
 
-      {/* Email header */}
-      <MessageHeader onReply={onReply} onForward={onForward} />
+      {/* Email header — no subject (already in top bar) */}
+      <MessageHeader onReply={onReply} onForward={onForward} hideSubject />
 
       {/* Email body — fills remaining space */}
       <div className="flex-1 min-h-0">
