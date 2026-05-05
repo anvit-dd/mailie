@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAccountWithTokens, getSession } from '@/lib/session'
+import { getValidGmailAccessToken } from '@/lib/gmail'
 
 export async function GET(request: NextRequest) {
   const sessionId = request.cookies.get('session')?.value
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest) {
   }
 
   const account = getAccountWithTokens(session.account_id)
+  const accessToken = await getValidGmailAccessToken(session.account_id)
   if (!account?.gmailTokens) {
     return new NextResponse('No Gmail connection', { status: 401 })
   }
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest) {
       // Fetch the full message to find the attachment by Content-ID
       const msgRes = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
-        { headers: { Authorization: `Bearer ${account!.gmailTokens!.access_token}` } }
+        { headers: { Authorization: `Bearer ${accessToken}` } }
       )
       if (!msgRes.ok) {
         return new NextResponse('Failed to fetch message for attachment', { status: msgRes.status })
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
       // Fetch the actual attachment bytes
       const attRes = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentData.attachmentId}`,
-        { headers: { Authorization: `Bearer ${account!.gmailTokens!.access_token}` } }
+        { headers: { Authorization: `Bearer ${accessToken}` } }
       )
       if (!attRes.ok) {
         return new NextResponse('Failed to fetch attachment data', { status: attRes.status })

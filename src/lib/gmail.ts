@@ -1,6 +1,51 @@
 import type { GmailMessage, GmailMessagePayload } from '@/lib/gmail-utils'
+import { getAccountWithTokens } from '@/lib/session'
+import { getGmailClientId, getGmailClientSecret } from '@/lib/gmail-config'
+import { db } from '@/lib/db'
 
 const BASE_URL = 'https://gmail.googleapis.com/gmail/v1/users/me'
+
+// Returns a valid access token, refreshing if expired or about to expire.
+// Call this BEFORE every Gmail API call instead of using account.gmailTokens.access_token directly.
+export async function getValidGmailAccessToken(accountId: string): Promise<string> {
+  const account = getAccountWithTokens(accountId)
+  if (!account?.gmailTokens?.refresh_token) {
+    throw new Error('No Gmail refresh token')
+  }
+
+  const now = Date.now()
+  const bufferMs = 5 * 60 * 1000 // refresh 5 min before expiry
+
+  // Token is still valid (with 5-min buffer)
+  if (account.gmailTokens.expires_at > now + bufferMs) {
+    return account.gmailTokens.access_token
+  }
+
+  // Token expired or about to expire — refresh it
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: getGmailClientId(),
+      client_secret: getGmailClientSecret(),
+      refresh_token: account.gmailTokens.refresh_token,
+      grant_type: 'refresh_token',
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Token refresh failed')
+  }
+
+  const tokens = await response.json()
+  const newExpiresAt = Date.now() + tokens.expires_in * 1000
+
+  db.prepare(`
+    UPDATE gmail_tokens SET access_token = ?, expires_at = ?, updated_at = ? WHERE account_id = ?
+  `).run(tokens.access_token, newExpiresAt, Date.now(), account.id)
+
+  return tokens.access_token
+}
 
 interface GmailApiError {
   error?: {

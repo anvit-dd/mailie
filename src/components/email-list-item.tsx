@@ -53,11 +53,23 @@ export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps
         }
       `}
     >
-      <div className="flex items-start gap-2">
-        {/* Unread indicator */}
-        <div className="mt-1.5">
-          {!email.isRead && (
-            <div className="w-2 h-2 rounded-full bg-accent" />
+      <div className="flex items-start gap-2.5">
+        {/* Sender avatar */}
+        <div className="mt-0.5 shrink-0">
+          {email.isRead ? (
+            // Read: small muted avatar
+            <div className="w-8 h-8 rounded-full bg-muted/30 flex items-center justify-center">
+              <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                {(email.from.name || email.from.email).charAt(0).toUpperCase()}
+              </span>
+            </div>
+          ) : (
+            // Unread: colored avatar with initial
+            <div className="w-8 h-8 rounded-full bg-accent/15 flex items-center justify-center">
+              <span className="font-mono text-xs text-accent font-semibold">
+                {(email.from.name || email.from.email).charAt(0).toUpperCase()}
+              </span>
+            </div>
           )}
         </div>
 

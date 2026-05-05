@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession, getAccountWithTokens } from '@/lib/session'
 import { escapeHtml, extractBody, type GmailMessage } from '@/lib/gmail-utils'
 import { sanitizeAndProxyEmailHtml } from '@/lib/gmail-sanitize'
+import { getValidGmailAccessToken } from '@/lib/gmail'
 
 export async function GET(request: NextRequest) {
   const sessionId = request.cookies.get('session')?.value
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
   }
 
   const account = getAccountWithTokens(session.account_id)
+  const accessToken = await getValidGmailAccessToken(session.account_id)
   if (!account?.gmailTokens) {
     return NextResponse.json({ error: 'No Gmail connection' }, { status: 401 })
   }
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
   try {
     const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`, {
       headers: {
-        Authorization: `Bearer ${account.gmailTokens.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
     })
 

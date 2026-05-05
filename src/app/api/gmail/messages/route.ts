@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, getAccountWithTokens } from '@/lib/session'
+import { getValidGmailAccessToken } from '@/lib/gmail'
 
 async function requireAuth(request: NextRequest) {
   const sessionId = request.cookies.get('session')?.value
@@ -8,12 +9,14 @@ async function requireAuth(request: NextRequest) {
   if (!session) return { error: NextResponse.json({ error: 'Invalid session' }, { status: 401 }), account: null }
   const account = getAccountWithTokens(session.account_id)
   if (!account?.gmailTokens) return { error: NextResponse.json({ error: 'No Gmail connection' }, { status: 401 }), account: null }
-  return { error: null, account }
+  return { error: null, account, accountId: session.account_id }
 }
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request)
   if (auth.error) return auth.error
+
+  const accessToken = await getValidGmailAccessToken(auth.accountId!)
 
   const { searchParams } = new URL(request.url)
   const label = searchParams.get('label') || 'INBOX'
@@ -26,7 +29,7 @@ export async function GET(request: NextRequest) {
   if (messageId) {
     const response = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
-      { headers: { Authorization: `Bearer ${auth.account!.gmailTokens!.access_token}` } }
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     )
     if (!response.ok) {
       const err = await response.json()
@@ -46,7 +49,7 @@ export async function GET(request: NextRequest) {
 
   const response = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`,
-    { headers: { Authorization: `Bearer ${auth.account!.gmailTokens!.access_token}` } }
+    { headers: { Authorization: `Bearer ${accessToken}` } }
   )
 
   if (!response.ok) {

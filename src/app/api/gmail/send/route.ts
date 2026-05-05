@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, getAccountWithTokens } from '@/lib/session'
+import { getValidGmailAccessToken } from '@/lib/gmail'
 
 export async function POST(request: NextRequest) {
   const sessionId = request.cookies.get('session')?.value
@@ -10,6 +11,8 @@ export async function POST(request: NextRequest) {
 
   const account = getAccountWithTokens(session.account_id)
   if (!account?.gmailTokens) return NextResponse.json({ error: 'No Gmail connection' }, { status: 401 })
+
+  const accessToken = await getValidGmailAccessToken(session.account_id)
 
   const body = await request.json()
   const { to, subject, body: emailBody, cc, bcc, inReplyTo, references, threadId } = body
@@ -45,7 +48,7 @@ export async function POST(request: NextRequest) {
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${account.gmailTokens.access_token}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
