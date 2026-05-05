@@ -83,7 +83,7 @@ export function MobileEmailView({ onReply, onForward }: MobileEmailViewProps) {
       </div>
 
       {/* ── Email body ──────────────────────────────────── */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <MessageBody noPadding />
       </div>
     </div>
