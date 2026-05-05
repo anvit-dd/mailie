@@ -1,4 +1,10 @@
 import type { Attachment, Email, EmailAddress, EmailDetail, Folder } from '@/types/email'
+import { createHash } from 'crypto'
+
+export function getGravatarUrl(email: string, size = 64): string {
+  const hash = createHash('md5').update(email.toLowerCase().trim()).digest('hex')
+  return `https://www.gravatar.com/avatar/${hash}?s=${size}&d=404`
+}
 
 export interface GmailMessageHeader {
   name: string
@@ -226,7 +232,10 @@ export function gmailMessageToEmail(message: GmailMessage): Email {
 export function gmailMessageToDetail(message: GmailMessage): EmailDetail {
   const headers = message.payload?.headers ?? []
   const subject = getHeader(headers, 'Subject')
-  const from = parseEmailAddress(getHeader(headers, 'From'))
+  const fromAddress = parseEmailAddress(getHeader(headers, 'From'))
+  if (fromAddress.email) {
+    fromAddress.avatarUrl = getGravatarUrl(fromAddress.email)
+  }
   const toHeader = getHeader(headers, 'To')
   const dateStr = getHeader(headers, 'Date')
   const references = getHeader(headers, 'References')
@@ -241,7 +250,7 @@ export function gmailMessageToDetail(message: GmailMessage): EmailDetail {
   return {
     id: message.id,
     threadId: message.threadId,
-    from,
+    from: fromAddress,
     to: toHeader.split(',').map((recipient) => parseEmailAddress(recipient.trim())),
     subject: subject || '(no subject)',
     preview: (() => {

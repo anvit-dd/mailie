@@ -56,17 +56,29 @@ export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps
       <div className="flex items-start gap-2.5">
         {/* Sender avatar */}
         <div className="mt-0.5 shrink-0">
-          {email.isRead ? (
-            // Read: small muted avatar
-            <div className="w-8 h-8 rounded-full bg-muted/30 flex items-center justify-center">
-              <span className="font-mono text-[10px] text-muted-foreground font-semibold">
-                {(email.from.name || email.from.email).charAt(0).toUpperCase()}
-              </span>
-            </div>
+          {email.from.avatarUrl ? (
+            <img
+              src={email.from.avatarUrl}
+              alt={email.from.name || email.from.email}
+              className={`w-8 h-8 rounded-full object-cover ${email.isRead ? 'opacity-60' : ''}`}
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement
+                // Gravatar 404 — replace with initials fallback
+                if (target.src.includes('gravatar.com')) {
+                  const initial = (email.from.name || email.from.email).charAt(0).toUpperCase()
+                  const parent = target.parentElement
+                  if (parent) {
+                    parent.innerHTML = email.isRead
+                      ? `<div class="w-8 h-8 rounded-full bg-muted/30 flex items-center justify-center"><span class="font-mono text-[10px] text-muted-foreground font-semibold">${initial}</span></div>`
+                      : `<div class="w-8 h-8 rounded-full bg-accent/15 flex items-center justify-center"><span class="font-mono text-xs text-accent font-semibold">${initial}</span></div>`
+                  }
+                }
+              }}
+            />
           ) : (
-            // Unread: colored avatar with initial
-            <div className="w-8 h-8 rounded-full bg-accent/15 flex items-center justify-center">
-              <span className="font-mono text-xs text-accent font-semibold">
+            // No avatar URL — show initials
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${email.isRead ? 'bg-muted/30' : 'bg-accent/15'}`}>
+              <span className={`font-mono text-xs font-semibold ${email.isRead ? 'text-[10px] text-muted-foreground' : 'text-xs text-accent'}`}>
                 {(email.from.name || email.from.email).charAt(0).toUpperCase()}
               </span>
             </div>

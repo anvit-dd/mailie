@@ -1,6 +1,7 @@
 export interface EmailAddress {
   name: string
   email: string
+  avatarUrl?: string
 }
 
 export interface Attachment {
