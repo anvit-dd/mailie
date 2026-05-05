@@ -37,11 +37,7 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
   const [subject, setSubject] = useState(
     replyTo?.subject ? (replyTo.subject.startsWith('Re:') ? replyTo.subject : `Re: ${replyTo.subject}`) : ''
   )
-  const [body, setBody] = useState(
-    replyTo?.body
-      ? `\n\n--- Original Message ---\n${replyTo.body.replace(/^--- Original Message ---\s*/i, '').trim().split('\n').map((line: string) => `> ${line}`).join('\n')}\n\n`
-      : ''
-  )
+  const [body, setBody] = useState(replyTo?.body ?? '')
   const [attachments, setAttachments] = useState<File[]>([])
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)

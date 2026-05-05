@@ -244,7 +244,10 @@ export function gmailMessageToDetail(message: GmailMessage): EmailDetail {
     from,
     to: toHeader.split(',').map((recipient) => parseEmailAddress(recipient.trim())),
     subject: subject || '(no subject)',
-    preview: bodyPlain.slice(0, 120) || body.replace(/<[^>]*>/g, '').slice(0, 120),
+    preview: (() => {
+      const parts = bodyPlain.split(/--- Original Message ---\s*/i)
+      return parts[parts.length - 1].trim().slice(0, 120)
+    })(),
     date: new Date(dateStr),
     isRead: !labelIds.includes('UNREAD'),
     isStarred: labelIds.includes('STARRED'),
