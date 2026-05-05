@@ -38,7 +38,7 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
   )
   const [body, setBody] = useState(
     replyTo?.body
-      ? `\n\n--- Original Message ---\n${replyTo.body.replace(/^--- Original Message ---\s*/i, '').trim()}\n\n`
+      ? `\n\n--- Original Message ---\n${replyTo.body.replace(/^--- Original Message ---\s*/i, '').trim().split('\n').map((line: string) => `> ${line}`).join('\n')}\n\n`
       : ''
   )
   const [attachments, setAttachments] = useState<File[]>([])

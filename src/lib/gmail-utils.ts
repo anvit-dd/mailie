@@ -80,8 +80,10 @@ function decodeHtmlEntities(value: string): string {
 
 export function stripHtml(html: string): string {
   return decodeHtmlEntities(html)
-    // Replace block-level tags with newlines so paragraph structure is preserved
-    .replace(/<\/(p|div|br|li|tr|h[1-6])[^>]*>/gi, '\n')
+    // Replace opening block-level tags with newlines so paragraph structure is preserved
+    .replace(/<(p|div|br|li|tr|h[1-6])[^>]*>/gi, '\n')
+    // Replace self-closing br tags with newlines (handles <br/> and <br />)
+    .replace(/<br\s*\/?>/gi, '\n')
     // Remove all remaining HTML tags
     .replace(/<[^>]*>/g, ' ')
     // Collapse numeric HTML entities (&#39;, &#x27;) to a space

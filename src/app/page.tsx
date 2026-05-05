@@ -67,7 +67,7 @@ export default function Home() {
     }
   }
 
-  const handleReply = () => {
+  const handleReply = useCallback(() => {
     if (!selectedEmail) return
     setReplyTo({
       to: selectedEmail.from.email,
@@ -80,7 +80,7 @@ export default function Home() {
     })
     setComposeNonce((value) => value + 1)
     setIsComposeOpen(true)
-  }
+  }, [selectedEmail])
 
   const handleForward = () => {
     setReplyTo(undefined)

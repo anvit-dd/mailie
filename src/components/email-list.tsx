@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useEmail } from '@/contexts/email-context'
 import { EmailListItem } from './email-list-item'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -22,6 +22,19 @@ export function EmailList() {
     setSearchQuery,
     pendingEmailId,
   } = useEmail()
+
+  // Debounce search so API fires only after user stops typing for 300ms
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleSearchChange = (value: string) => {
+    // Update input value immediately
+    setSearchQuery(value)
+    // Debounce the API call
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      refreshEmails()
+    }, 300)
+  }
 
   useEffect(() => {
     setSelectedEmail(null)
@@ -46,7 +59,7 @@ export function EmailList() {
           <Input
             placeholder="Search..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="h-8 pl-8 pr-8 font-mono text-sm bg-surface"
           />
           {searchQuery && (
