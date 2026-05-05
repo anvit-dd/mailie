@@ -96,7 +96,7 @@ function buildSrcdoc(html: string): string {
 </html>`
 }
 
-function MessageBodyContent({ selectedEmail }: { selectedEmail: EmailDetail }) {
+function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: EmailDetail; noPadding?: boolean }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [emailHtml, setEmailHtml] = useState<string | null>(null)
@@ -150,10 +150,13 @@ function MessageBodyContent({ selectedEmail }: { selectedEmail: EmailDetail }) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Padded wrapper — sits outside the scroll layer so padding doesn't add to scroll height */}
-      <div className="p-4 flex-1 min-h-0 flex flex-col">
-        {/* Email body scroll container */}
-        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain">
+      {/* Email body — optionally no padding when embedded in a padded container */}
+      <div className={`flex-1 min-h-0 flex flex-col ${noPadding ? '' : 'p-4'}`}>
+        {/* Email body scroll container — parent handles scrolling when noPadding */}
+        <div
+          ref={scrollRef}
+          className={`flex-1 min-h-0 overflow-y-auto overscroll-y-contain ${noPadding ? '' : 'overflow-y-auto'}`}
+        >
           {isLoading && (
             <div className="mb-3">
               <p className="font-mono text-xs text-muted-foreground animate-pulse">
@@ -189,7 +192,7 @@ function MessageBodyContent({ selectedEmail }: { selectedEmail: EmailDetail }) {
 
           {/* Plain text fallback (no HTML body) */}
           {!emailHtml && !isLoading && !error && selectedEmail.bodyPlain && (
-            <pre className="text-sm whitespace-pre-wrap">
+            <pre className={`whitespace-pre-wrap ${noPadding ? 'p-3' : ''} text-sm`}>
               {selectedEmail.bodyPlain}
             </pre>
           )}
@@ -204,9 +207,9 @@ function MessageBodyContent({ selectedEmail }: { selectedEmail: EmailDetail }) {
           )}
         </div>
 
-        {/* Attachments — inside the padding wrapper */}
+        {/* Attachments */}
         {selectedEmail.attachments && selectedEmail.attachments.length > 0 && (
-          <div className="shrink-0 px-4 pb-4 pt-2 border-t border-border">
+          <div className={`shrink-0 border-t border-border ${noPadding ? 'p-3' : 'px-4 pb-4 pt-2'}`}>
             <p className="font-mono text-xs text-muted-foreground mb-2">
               Attachments ({selectedEmail.attachments.length})
             </p>
@@ -238,7 +241,7 @@ function MessageBodyContent({ selectedEmail }: { selectedEmail: EmailDetail }) {
   )
 }
 
-export function MessageBody() {
+export function MessageBody({ noPadding }: { noPadding?: boolean }) {
   const { selectedEmail } = useEmail()
 
   if (!selectedEmail) {
@@ -256,5 +259,5 @@ export function MessageBody() {
     )
   }
 
-  return <MessageBodyContent key={selectedEmail.id} selectedEmail={selectedEmail} />
+  return <MessageBodyContent key={selectedEmail.id} selectedEmail={selectedEmail} noPadding={noPadding} />
 }

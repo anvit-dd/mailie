@@ -2,10 +2,9 @@
 
 import { useEmail } from '@/contexts/email-context'
 import { EmailList } from './email-list'
-import { MessageHeader } from './message-header'
 import { MessageBody } from './message-body'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Reply, ArrowRight, Trash2, Star } from 'lucide-react'
 
 interface MobileEmailViewProps {
   onReply: () => void
@@ -23,29 +22,69 @@ export function MobileEmailView({ onReply, onForward }: MobileEmailViewProps) {
     )
   }
 
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  }
+
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-background">
-      {/* Mobile top bar — back button + subject on same line */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-surface shrink-0">
+      {/* ── Top bar ─────────────────────────────────────── */}
+      <div className="flex items-center gap-2 px-2 py-2 border-b border-border bg-surface shrink-0">
+        {/* Back */}
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 shrink-0"
+          className="h-8 w-8 shrink-0"
           onClick={() => setSelectedEmail(null)}
         >
           <ChevronLeft className="w-5 h-5" />
         </Button>
-        <span className="font-mono text-sm truncate flex-1">
+
+        {/* Subject — fills middle */}
+        <span className="font-mono text-sm font-semibold truncate flex-1 min-w-0">
           {selectedEmail.subject || 'Email'}
         </span>
+
+        {/* Quick actions — reply / forward as icons */}
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onReply}>
+          <Reply className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onForward}>
+          <ArrowRight className="w-4 h-4" />
+        </Button>
       </div>
 
-      {/* Email header — no subject (already in top bar) */}
-      <MessageHeader onReply={onReply} onForward={onForward} hideSubject />
+      {/* ── Sender row ──────────────────────────────────── */}
+      <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border bg-surface">
+        {/* Avatar */}
+        <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center shrink-0">
+          <span className="font-mono text-xs text-accent font-semibold">
+            {(selectedEmail.from.name || selectedEmail.from.email).charAt(0).toUpperCase()}
+          </span>
+        </div>
 
-      {/* Email body — fills remaining space */}
+        {/* Name + meta */}
+        <div className="flex-1 min-w-0">
+          <p className="font-mono text-xs font-semibold truncate">
+            {selectedEmail.from.name || selectedEmail.from.email}
+          </p>
+          <p className="font-mono text-[10px] text-muted-foreground">
+            to me · {formatTime(selectedEmail.date)}
+          </p>
+        </div>
+
+        {/* More actions */}
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+          <Star className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+
+      {/* ── Email body ──────────────────────────────────── */}
       <div className="flex-1 min-h-0">
-        <MessageBody />
+        <MessageBody noPadding />
       </div>
     </div>
   )
