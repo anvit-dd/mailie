@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
         return new NextResponse('Failed to fetch attachment data', { status: attRes.status })
       }
       const att = await attRes.json()
-      const base64Data = att.data?.replace(/-/g, '+').replace(/_/g, '/')
+      const base64Data = normalizeBase64Url(att.data)
       if (!base64Data) {
         return new NextResponse('No data in attachment response', { status: 502 })
       }
@@ -130,7 +130,7 @@ function findAttachmentByCid(
   if (!parts) return null
 
   for (const part of parts) {
-    if (part.filename && part.body?.attachmentId) {
+    if (part.body?.attachmentId) {
       const contentIdHeader = part.headers?.find(
         (h: { name: string; value: string }) => h.name.toLowerCase() === 'content-id'
       )
@@ -145,4 +145,10 @@ function findAttachmentByCid(
     }
   }
   return null
+}
+
+function normalizeBase64Url(data: string | undefined): string {
+  if (!data) return ''
+  const base64 = data.replace(/-/g, '+').replace(/_/g, '/')
+  return base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, '=')
 }

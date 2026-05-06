@@ -1,5 +1,6 @@
 'use client'
 
+import { startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useEmail } from '@/contexts/email-context'
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { toast } from 'sonner'
 import {
   Inbox,
+  ShieldAlert,
   Send,
   File,
   Trash2,
@@ -19,6 +21,7 @@ import {
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   inbox: Inbox,
+  spam: ShieldAlert,
   send: Send,
   file: File,
   trash: Trash2,
@@ -42,7 +45,9 @@ export function MobileNav({ onCompose }: MobileNavProps) {
   }
 
   const handleFolderSelect = (folder: typeof currentFolder) => {
-    setCurrentFolder(folder)
+    startTransition(() => {
+      setCurrentFolder(folder)
+    })
   }
 
   return (

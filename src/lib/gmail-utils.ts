@@ -59,6 +59,7 @@ export interface GmailMessage {
   id: string
   threadId: string
   labelIds?: string[]
+  snippet?: string
   payload?: GmailMessagePayload
 }
 
@@ -230,6 +231,7 @@ export function gmailMessageToEmail(message: GmailMessage): Email {
   const hasAttachments = Boolean(
     message.payload?.parts?.some((part) => Boolean(part.filename)) || message.payload?.body?.attachmentId
   )
+  const previewSource = message.snippet?.trim() || bodyPlain
 
   return {
     id: message.id,
@@ -238,8 +240,10 @@ export function gmailMessageToEmail(message: GmailMessage): Email {
     to: toHeader.split(',').map((recipient) => parseEmailAddress(recipient.trim())),
     subject: subject || '(no subject)',
     preview: (() => {
+      const source = previewSource
+      if (!source) return ''
       // Extract only the NEW content (after last --- Original Message ---) for the preview
-      const parts = bodyPlain.split(/--- Original Message ---\s*/i)
+      const parts = source.split(/--- Original Message ---\s*/i)
       const latestContent = parts[parts.length - 1].trim()
       return latestContent.slice(0, 120)
     })(),
@@ -297,6 +301,7 @@ export function gmailMessageToDetail(message: GmailMessage): EmailDetail {
 export function getFolders(): Folder[] {
   return [
     { id: 'INBOX', name: 'Inbox', icon: 'inbox', unreadCount: 0 },
+    { id: 'SPAM', name: 'Spam', icon: 'spam', unreadCount: 0 },
     { id: 'SENT', name: 'Sent', icon: 'send', unreadCount: 0 },
     { id: 'DRAFT', name: 'Drafts', icon: 'file', unreadCount: 0 },
     { id: 'TRASH', name: 'Trash', icon: 'trash', unreadCount: 0 },

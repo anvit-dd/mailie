@@ -17,12 +17,11 @@ interface EmailContextType {
   isLoadingList: boolean
   isLoadingEmail: boolean
   error: string | null
-  searchQuery: string
-  setSearchQuery: (query: string) => void
   pendingEmailId: string | null
+  nextPageToken: string | null
   setSelectedEmail: (email: EmailDetail | null) => void
   setCurrentFolder: (folder: Folder) => void
-  refreshEmails: () => Promise<void>
+  refreshEmails: (query?: string, options?: { force?: boolean; append?: boolean }) => Promise<Email[]>
   loadEmailDetail: (id: string) => Promise<void>
   drafts: Draft[]
   saveDraft: (draft: Draft) => void
@@ -64,26 +63,26 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   const [isLoadingList, setIsLoadingList] = useState(false)
   const [isLoadingEmail, setIsLoadingEmail] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
   const [pendingEmailId, setPendingEmailId] = useState<string | null>(null)
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Draft[]>(() => readStoredDrafts())
   const [avatarMap, setAvatarMap] = useState<Record<string, string>>({})
 
   // Cache full GmailMessage objects to avoid re-fetching when opening emails
   const [emailCache, setEmailCache] = useState<Record<string, GmailMessage>>({})
+  const emailsRef = useRef<Email[]>([])
+  const selectedEmailRef = useRef<EmailDetail | null>(null)
   // Keep a ref in sync with cache so loadEmailDetail can read it without needing it in deps
   const emailCacheRef = useRef<Record<string, GmailMessage>>({})
+  const refreshAbortRef = useRef<AbortController | null>(null)
+  const refreshRequestIdRef = useRef(0)
+  const nextPageTokenRef = useRef<string | null>(null)
 
-  // Ref to avoid searchQuery causing refreshEmails recreation on every keystroke
-  const searchQueryRef = useRef(searchQuery)
-
-  // Debounce ref — tracks the last query we actually fired an API call for
-  // Initialize with undefined sentinel so first call (empty string) always goes through
-  const lastFiredQueryRef = useRef<string | undefined>(undefined)
+  const lastFiredRequestKeyRef = useRef<string | undefined>(undefined)
 
   // Reset debounce when folder changes so navigation always fires
   useEffect(() => {
-    lastFiredQueryRef.current = undefined
+    lastFiredRequestKeyRef.current = undefined
   }, [currentFolder.id])
 
   useEffect(() => {
@@ -91,25 +90,48 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   }, [emailCache])
 
   useEffect(() => {
-    searchQueryRef.current = searchQuery
-  }, [searchQuery])
+    emailsRef.current = emails
+  }, [emails])
 
-  const refreshEmails = useCallback(async () => {
-    // Debounce: skip if we've already fired for this exact query
-    const currentQuery = searchQueryRef.current
-    if (currentQuery === lastFiredQueryRef.current) return
-    lastFiredQueryRef.current = currentQuery
+  useEffect(() => {
+    selectedEmailRef.current = selectedEmail
+  }, [selectedEmail])
+
+  useEffect(() => {
+    nextPageTokenRef.current = nextPageToken
+  }, [nextPageToken])
+
+  const refreshEmails = useCallback(async (query = '', options?: { force?: boolean; append?: boolean }): Promise<Email[]> => {
+    const pageToken = options?.append ? nextPageTokenRef.current ?? undefined : undefined
+    const requestKey = `${currentFolder.id}::${query}::${pageToken || 'first'}`
+    if (!options?.force && requestKey === lastFiredRequestKeyRef.current) return emailsRef.current
+    lastFiredRequestKeyRef.current = requestKey
+    const requestId = ++refreshRequestIdRef.current
+    refreshAbortRef.current?.abort()
+    const controller = new AbortController()
+    refreshAbortRef.current = controller
+
+    const isCurrentRequest = () => refreshRequestIdRef.current === requestId
+
     setIsLoadingList(true)
     setError(null)
+    if (!options?.append) {
+      setNextPageToken(null)
+    }
+    let nextEmails: Email[] = []
 
     try {
       // Step 1: get list of message IDs
-      const res = await fetch(`/api/gmail/messages?label=${currentFolder.id}&maxResults=25${searchQueryRef.current ? `&q=${encodeURIComponent(searchQueryRef.current)}` : ''}`)
+      const res = await fetch(
+        `/api/gmail/messages?label=${currentFolder.id}&maxResults=25${query ? `&q=${encodeURIComponent(query)}` : ''}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`,
+        { signal: controller.signal }
+      )
+      if (!isCurrentRequest()) return emailsRef.current
       if (!res.ok) {
         throw new Error('Failed to fetch emails')
       }
 
-      const data: { messages?: Array<{ id: string }> } = await res.json()
+      const data: { messages?: Array<{ id: string }>; nextPageToken?: string | null } = await res.json()
 
       if (data.messages && data.messages.length > 0) {
         const messageIds = data.messages.map((m) => m.id)
@@ -119,8 +141,10 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ids: messageIds }),
+          signal: controller.signal,
         })
 
+        if (!isCurrentRequest()) return emailsRef.current
         if (!batchRes.ok) {
           throw new Error('Failed to fetch email batch')
         }
@@ -136,7 +160,10 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
           return Object.fromEntries(next)
         })
 
-        setEmails(messages.map(gmailMessageToEmail))
+        const mappedEmails = messages.map(gmailMessageToEmail)
+        nextEmails = options?.append ? [...emailsRef.current, ...mappedEmails] : mappedEmails
+        setEmails(nextEmails)
+        setNextPageToken(data.nextPageToken ?? null)
 
         // Fetch avatars for all unique sender emails in one batch call
         const uniqueEmails = [...new Set(messages.map((m) => {
@@ -147,7 +174,10 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
 
         if (uniqueEmails.length > 0) {
           try {
-            const avatarRes = await fetch(`/api/contacts/avatar?emails=${uniqueEmails.join(',')}`)
+            const avatarRes = await fetch(`/api/contacts/avatar?emails=${uniqueEmails.join(',')}`, {
+              signal: controller.signal,
+            })
+            if (!isCurrentRequest()) return emailsRef.current
             if (avatarRes.ok) {
               const avatarData: Record<string, string> = await avatarRes.json()
               setAvatarMap(avatarData)
@@ -157,15 +187,25 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } else {
+        nextEmails = []
         setEmails([])
+        setNextPageToken(null)
       }
     } catch (error: unknown) {
+      if (controller.signal.aborted || !isCurrentRequest()) {
+        return emailsRef.current
+      }
       console.error('Failed to refresh emails:', error)
       setError(getErrorMessage(error))
+      nextEmails = []
       setEmails([])
+      setNextPageToken(null)
     } finally {
-      setIsLoadingList(false)
+      if (isCurrentRequest()) {
+        setIsLoadingList(false)
+      }
     }
+    return nextEmails
   }, [currentFolder.id])
 
   const loadEmailDetail = useCallback(async (id: string) => {
@@ -178,7 +218,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       // Check cache first — message was likely already fetched in refreshEmails
       let message: GmailMessage | null = emailCacheRef.current[id] ?? null
 
-      if (!message) {
+      if (!message || !message.payload?.body && !message.payload?.parts) {
         const res = await fetch(`/api/gmail/messages?id=${id}`)
         if (!res.ok) {
           throw new Error('Failed to load email')
@@ -269,9 +309,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
         isLoadingList,
         isLoadingEmail,
         error,
-        searchQuery,
-        setSearchQuery,
         pendingEmailId,
+        nextPageToken,
         setSelectedEmail,
         setCurrentFolder,
         refreshEmails,

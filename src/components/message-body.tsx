@@ -119,7 +119,7 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [emailHtml, setEmailHtml] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(Boolean(selectedEmail.body))
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [iframeHeight, setIframeHeight] = useState<number | undefined>(undefined)
 
@@ -136,10 +136,6 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
 
   // Fetch email body HTML when a new email is selected
   useEffect(() => {
-    if (!selectedEmail.body && !selectedEmail.bodyPlain) {
-      return
-    }
-
     const controller = new AbortController()
 
     fetch(`/api/gmail/body?id=${selectedEmail.id}`, {
@@ -160,7 +156,7 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
       })
 
     return () => controller.abort()
-  }, [selectedEmail.body, selectedEmail.bodyPlain, selectedEmail.id])
+  }, [selectedEmail.id])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

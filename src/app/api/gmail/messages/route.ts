@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
   // List messages
   const params = new URLSearchParams({ maxResults: String(maxResults) })
   if (label) {
-    const labelMap: Record<string, string> = { INBOX: 'INBOX', SENT: 'SENT', DRAFT: 'DRAFT', TRASH: 'TRASH' }
+    const labelMap: Record<string, string> = { INBOX: 'INBOX', SPAM: 'SPAM', SENT: 'SENT', DRAFT: 'DRAFT', TRASH: 'TRASH' }
     params.set('labelIds', labelMap[label] || label)
   }
   if (pageToken) params.set('pageToken', pageToken)

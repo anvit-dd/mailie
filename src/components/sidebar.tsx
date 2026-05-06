@@ -1,5 +1,6 @@
 'use client'
 
+import { startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useEmail } from '@/contexts/email-context'
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import {
   Inbox,
+  ShieldAlert,
   Send,
   File,
   Trash2,
@@ -18,6 +20,7 @@ import {
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   inbox: Inbox,
+  spam: ShieldAlert,
   send: Send,
   file: File,
   trash: Trash2,
@@ -71,7 +74,11 @@ export function Sidebar({ onCompose }: SidebarProps) {
             return (
               <button
                 key={folder.id}
-                onClick={() => setCurrentFolder(folder)}
+                onClick={() => {
+                  startTransition(() => {
+                    setCurrentFolder(folder)
+                  })
+                }}
                 className={`
                   w-full flex items-center justify-between px-3 py-2
                   font-mono text-sm rounded-sm transition-colors

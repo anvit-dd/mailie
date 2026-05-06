@@ -100,6 +100,7 @@ export async function listMessages(
   if (label) {
     const labelMap: Record<string, string> = {
       INBOX: 'INBOX',
+      SPAM: 'SPAM',
       SENT: 'SENT',
       DRAFT: 'DRAFT',
       TRASH: 'TRASH',

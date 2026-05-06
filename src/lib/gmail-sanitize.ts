@@ -12,22 +12,44 @@ function stripEventHandlers(html: string): string {
 }
 
 function proxyImageUrls(html: string, messageId?: string): string {
-  return html.replace(/<img\b([^>]*?)src=(["'])(.*?)\2([^>]*)>/gi, (_match, before, quote, src, after) => {
-    let proxyUrl = ''
-
+  const proxyUrlFor = (src: string): string | null => {
     if (/^https?:\/\//i.test(src)) {
-      proxyUrl = `/api/gmail/proxy?url=${encodeURIComponent(src)}`
-    } else if (/^cid:/i.test(src)) {
+      return `/api/gmail/proxy?url=${encodeURIComponent(src)}`
+    }
+
+    if (/^cid:/i.test(src)) {
       const cidValue = src.slice(4)
-      proxyUrl = `/api/gmail/proxy?cid=${encodeURIComponent(cidValue)}${messageId ? `&messageId=${encodeURIComponent(messageId)}` : ''}`
+      return `/api/gmail/proxy?cid=${encodeURIComponent(cidValue)}${messageId ? `&messageId=${encodeURIComponent(messageId)}` : ''}`
     }
 
-    if (!proxyUrl) {
-      return `<img${before}src=${quote}${src}${quote}${after}>`
-    }
+    return null
+  }
 
-    return `<img${before}src=${quote}${proxyUrl}${quote}${after}>`
+  const replaceAttr = (htmlValue: string, attrName: string): string => {
+    const attrPattern = new RegExp(`(${attrName}\\s*=\\s*)(["'])(.*?)\\2`, 'gi')
+    return htmlValue.replace(attrPattern, (_match, prefix, quote, src) => {
+      const proxyUrl = proxyUrlFor(src)
+      if (!proxyUrl) return `${prefix}${quote}${src}${quote}`
+      return `${prefix}${quote}${proxyUrl}${quote}`
+    })
+  }
+
+  let next = html
+  next = replaceAttr(next, 'src')
+  next = replaceAttr(next, 'data-src')
+  next = replaceAttr(next, 'data-original')
+  next = replaceAttr(next, 'data-lazy-src')
+  next = replaceAttr(next, 'data-echo')
+
+  next = next.replace(/style=(["'])(.*?)\1/gi, (match, quote: string, style: string) => {
+    const rewritten = style.replace(/url\((['"]?)(.*?)\1\)/gi, (_urlMatch, _urlQuote, url: string) => {
+      const proxyUrl = proxyUrlFor(url)
+      return proxyUrl ? `url("${proxyUrl}")` : `url("${url}")`
+    })
+    return `style=${quote}${rewritten}${quote}`
   })
+
+  return next
 }
 
 export function sanitizeAndProxyEmailHtml(html: string, messageId?: string): string {
