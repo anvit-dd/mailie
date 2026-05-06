@@ -111,20 +111,30 @@ function decodeHtmlEntities(value: string): string {
 
 export function stripHtml(html: string): string {
   return decodeHtmlEntities(html)
-    // Replace opening block-level tags with newlines so paragraph structure is preserved
-    .replace(/<(p|div|br|li|tr|h[1-6])[^>]*>/gi, '\n')
-    // Replace self-closing br tags with newlines (handles <br/> and <br />)
+    // Normalize line endings first
+    .replace(/\r\n?/g, '\n')
+    // Drop non-content blocks before removing tags so CSS/JS text is not displayed
+    .replace(/<style\b[\s\S]*?<\/style>/gi, '')
+    .replace(/<script\b[\s\S]*?<\/script>/gi, '')
+    .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, '')
+    // Convert structural tags to explicit line breaks
     .replace(/<br\s*\/?>/gi, '\n')
-    // Remove all remaining HTML tags
-    .replace(/<[^>]*>/g, ' ')
-    // Collapse numeric HTML entities (&#39;, &#x27;) to a space
-    .replace(/&#[a-z0-9]+;/gi, ' ')
-    // Collapse runs of whitespace into single spaces
-    .replace(/\s+/g, ' ')
-    // Strip leading/trailing whitespace from each line, then normalize line breaks
+    .replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
+    .replace(/<(p|div|li|tr|h[1-6])[^>]*>/gi, '\n')
+    // Remove all remaining tags without adding spaces that flatten lines
+    .replace(/<[^>]*>/g, '')
+    // Collapse spaces/tabs only (preserve \n)
+    .replace(/[ \t\f\v\u00a0]+/g, ' ')
+    // Trim spacing around line breaks
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    // Collapse very large vertical gaps
+    .replace(/\n{3,}/g, '\n\n')
+    // Strip leading/trailing whitespace from each line
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line.length > 0)
+    // Keep intentional blank lines, but remove trailing-only empties
+    .filter((line, index, arr) => !(line.length === 0 && index === arr.length - 1))
     .join('\n')
     .trim()
 }

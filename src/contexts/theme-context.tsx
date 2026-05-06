@@ -19,21 +19,14 @@ function getStoredTheme(): Theme {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('dark')
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setThemeState(getStoredTheme())
-    setMounted(true)
-  }, [])
+  const [theme, setThemeState] = useState<Theme>(() => getStoredTheme())
 
   // Apply theme class to <html> whenever it changes
   useEffect(() => {
-    if (!mounted) return
     const root = document.documentElement
     root.classList.remove('light', 'dark')
     root.classList.add(theme)
-  }, [theme, mounted])
+  }, [theme])
 
   const toggleTheme = useCallback(() => {
     setThemeState((prev) => {

@@ -5,7 +5,9 @@ import type { EmailDetail } from '@/types/email'
 import { File, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EMAIL_VIEWER_CSS } from '@/lib/gmail-viewer-css'
+import { stripHtml } from '@/lib/gmail-utils'
 import { useEffect, useRef, useState } from 'react'
+import { useTheme } from '@/contexts/theme-context'
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -89,7 +91,7 @@ const HEIGHT_MEASUREMENT_SCRIPT = `
 </script>
 `
 
-function buildSrcdoc(html: string): string {
+function buildSrcdoc(html: string, theme: 'light' | 'dark'): string {
   // Emails are full HTML documents with <html>, <head>, <body>.
   // Inject the complete sanitized HTML directly as the iframe content so all
   // CSS selectors (body > .container, html body .card, etc.) remain valid.
@@ -136,12 +138,23 @@ function buildSrcdoc(html: string): string {
     const document = parser.parseFromString(html, 'text/html')
     const plainText = isPlainTextEmail(document)
 
-    // Inject --iframe-bg CSS variable on <html> so body background can reference it.
-    // Plain-text emails: background=transparent (host app theme shows through).
-    // Styled emails: background=#ffffff (email's own attrs override everything).
+    // Inject theme vars on <html> so plain-text emails match app theme.
     const htmlEl = document.documentElement
     const existingBg = htmlEl.getAttribute('style') || ''
-    htmlEl.setAttribute('style', existingBg + (existingBg ? ' ' : '') + `--iframe-bg: ${plainText ? 'transparent' : '#ffffff'};`)
+    const iframeBg = plainText ? 'transparent' : '#ffffff'
+    const iframeFg = theme === 'dark' ? '#e8e8e8' : '#18181b'
+    htmlEl.setAttribute(
+      'style',
+      existingBg +
+        (existingBg ? ' ' : '') +
+        `--iframe-bg: ${iframeBg}; color-scheme: ${theme};`
+    )
+    htmlEl.setAttribute('data-plain-text', String(plainText))
+    if (plainText) {
+      htmlEl.style.setProperty('--iframe-fg', iframeFg)
+    } else {
+      htmlEl.style.removeProperty('--iframe-fg')
+    }
 
     const headEl = document.querySelector('head')
     if (headEl) {
@@ -154,6 +167,8 @@ function buildSrcdoc(html: string): string {
     // Inject height measurement script by inserting it before </body>
     return fullDoc.replace('</body>', `${HEIGHT_MEASUREMENT_SCRIPT}</body>`)
   } catch {
+    const iframeFg = theme === 'dark' ? '#e8e8e8' : '#18181b'
+    const iframeBg = 'transparent'
     // Fallback: return as-is with white background (safe default)
     return `<!DOCTYPE html>
 <html>
@@ -161,6 +176,7 @@ function buildSrcdoc(html: string): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta http-equiv="Content-Security-Policy" content="script-src 'none'; frame-src 'none'; object-src 'none'; img-src 'self' https: data:;">
+  <style>:root{--iframe-bg:${iframeBg};color-scheme:${theme};}${iframeBg === 'transparent' ? '' : ''}</style>
   <style>${EMAIL_VIEWER_CSS}</style>
 </head>
 <body>${html}</body>
@@ -168,10 +184,67 @@ function buildSrcdoc(html: string): string {
   }
 }
 
+function htmlToPlainText(html: string): string {
+  try {
+    const parser = new DOMParser()
+    const document = parser.parseFromString(html, 'text/html')
+    document.querySelectorAll('script, style, noscript, meta, title').forEach((node) => node.remove())
+    return stripHtml(document.body.innerHTML)
+  } catch {
+    return stripHtml(html)
+  }
+}
+
+function shouldRenderAsPlainText(html: string, apiPlainText: boolean): boolean {
+  if (apiPlainText) return true
+  if (/<(img|svg|video|audio|canvas|iframe|form|button|input|select|textarea)\b/i.test(html)) return false
+
+  const text = htmlToPlainText(html)
+  if (text.length < 80) return false
+
+  let bodyHtml = html
+  try {
+    const parser = new DOMParser()
+    const document = parser.parseFromString(html, 'text/html')
+    document.querySelectorAll('script, style, noscript, meta, title').forEach((node) => node.remove())
+    bodyHtml = document.body.innerHTML
+  } catch {
+    bodyHtml = html.replace(/<script\b[\s\S]*?<\/script>/gi, '').replace(/<style\b[\s\S]*?<\/style>/gi, '')
+  }
+
+  const tagNames = Array.from(bodyHtml.matchAll(/<\/?\s*([a-z0-9:-]+)/gi), (match) => match[1].toLowerCase())
+  const allowedTextWrapperTags = new Set([
+    'div',
+    'span',
+    'p',
+    'br',
+    'b',
+    'strong',
+    'i',
+    'em',
+    'u',
+    'font',
+    'center',
+    'table',
+    'tbody',
+    'thead',
+    'tfoot',
+    'tr',
+    'td',
+    'th',
+    'a',
+  ])
+
+  return tagNames.every((tagName) => allowedTextWrapperTags.has(tagName))
+}
+
 function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: EmailDetail; noPadding?: boolean }) {
+  const { theme } = useTheme()
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [emailHtml, setEmailHtml] = useState<string | null>(null)
+  const [isPlainTextHtml, setIsPlainTextHtml] = useState(false)
+  const [plainTextBody, setPlainTextBody] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -198,7 +271,11 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
         return res.json()
       })
       .then((data) => {
-        setEmailHtml(data.html || '')
+        const html = String(data.html || '')
+        const plainText = shouldRenderAsPlainText(html, Boolean(data.plainText))
+        setIsPlainTextHtml(plainText)
+        setPlainTextBody(plainText ? htmlToPlainText(html) || String(data.bodyPlain || '') : '')
+        setEmailHtml(html)
         setIsLoading(false)
       })
       .catch((err) => {
@@ -236,7 +313,7 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
           )}
 
           {/* HTML email in sandboxed srcdoc iframe */}
-          {emailHtml && (
+          {emailHtml && !isPlainTextHtml && (
             <iframe
               ref={iframeRef}
               className="block w-full border-0"
@@ -248,14 +325,14 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
               }}
               sandbox="allow-scripts"
               title={`Email: ${selectedEmail.subject}`}
-              srcDoc={buildSrcdoc(emailHtml)}
+              srcDoc={buildSrcdoc(emailHtml, theme)}
             />
           )}
 
           {/* Plain text fallback (no HTML body) */}
-          {!emailHtml && !isLoading && !error && selectedEmail.bodyPlain && (
-            <pre className={`whitespace-pre-wrap ${noPadding ? 'p-3' : ''} text-sm`}>
-              {selectedEmail.bodyPlain}
+          {(isPlainTextHtml || (!emailHtml && !isLoading && !error && selectedEmail.bodyPlain)) && (
+            <pre className={`whitespace-pre-wrap ${noPadding ? 'p-3' : ''} text-sm text-foreground bg-transparent`}>
+              {plainTextBody || selectedEmail.bodyPlain}
             </pre>
           )}
 

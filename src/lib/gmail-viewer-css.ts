@@ -28,21 +28,12 @@ export const EMAIL_VIEWER_CSS = `
     font-family: system-ui, -apple-system, sans-serif;
     font-size: 16px;
     line-height: 1.5;
-    color: #000000;
     word-break: break-word;
     overflow-wrap: break-word;
     overflow: auto;
   }
 
-  /* Leave everything else alone. Tables, tds, divs, fonts, centers —
-   * the email's own bgcolor attributes and inline styles decide their appearance.
-   * We do NOT cascade anything. */
-
-  @media (prefers-color-scheme: dark) {
-    body {
-      /* Plain-text emails (no inline color): show light text so it's readable on dark bg.
-       * Styled emails are unaffected — their inline color attrs have higher specificity. */
-      color: #e8e8e8;
-    }
+  html[data-plain-text="true"] body {
+    color: var(--iframe-fg, #000000);
   }
 `
