@@ -2,13 +2,19 @@
 
 import { useEffect, useState, type ChangeEvent, type Dispatch, type KeyboardEvent, type SetStateAction } from 'react'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useEmail } from '@/contexts/email-context'
 import { toast } from 'sonner'
 import { X, Send, Paperclip, Loader2 } from 'lucide-react'
 import type { Draft } from '@/types/email'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
+import Image from '@tiptap/extension-image'
+import Link from '@tiptap/extension-link'
+import Placeholder from '@tiptap/extension-placeholder'
+import { ComposeToolbar } from './compose-toolbar'
 
 interface ComposeProps {
   isOpen: boolean
@@ -63,14 +69,57 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
   const [subject, setSubject] = useState(
     replyTo?.subject ? (replyTo.subject.startsWith('Re:') ? replyTo.subject : `Re: ${replyTo.subject}`) : ''
   )
-  const [body, setBody] = useState(replyTo?.body ?? '')
   const [attachments, setAttachments] = useState<File[]>([])
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
 
+  // Initialize body HTML — empty for mailie replies (no auto-quote policy),
+  // or the raw replyTo.body if it contains HTML from a forwarded email.
+  const initialBodyHtml = replyTo?.body || ''
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3] },
+      }),
+      Underline,
+      Image.configure({ inline: true, allowBase64: true }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        linkOnPaste: true,
+      }),
+      Placeholder.configure({
+        placeholder: 'Write your message...',
+      }),
+    ],
+    content: initialBodyHtml,
+    editorProps: {
+      attributes: {
+        class: 'min-h-[180px] outline-none font-mono text-sm text-foreground',
+      },
+    },
+    onUpdate: ({ editor }) => {
+      // bodyHtml drives draft saving — keep in sync
+      setBodyHtml(editor.getHTML())
+    },
+  })
+
+  // Track bodyHtml for draft saving
+  const [bodyHtml, setBodyHtml] = useState(initialBodyHtml)
+
+  // Sync bodyHtml when replyTo changes (e.g., switching between reply contexts)
   useEffect(() => {
-    if (!isOpen || (!to.length && !cc.length && !bcc.length && !subject && !body)) return
+    if (editor && replyTo?.body) {
+      editor.commands.setContent(replyTo.body)
+      setBodyHtml(replyTo.body)
+    }
+  }, [replyTo?.body, editor])
+
+  // Auto-save draft every 30 seconds
+  useEffect(() => {
+    if (!isOpen || !editor) return
 
     const interval = setInterval(() => {
       const draft: Draft = {
@@ -78,14 +127,36 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
         cc,
         bcc,
         subject,
-        body,
+        body: editor.getHTML(), // store HTML for formatted draft restore
       }
       saveDraft(draft)
       setLastSaved(new Date())
     }, 30000)
 
     return () => clearInterval(interval)
-  }, [isOpen, to, cc, bcc, subject, body, saveDraft])
+  }, [isOpen, to, cc, bcc, subject, editor, saveDraft])
+
+  // Destroy editor on close to prevent memory leaks
+  useEffect(() => {
+    if (!isOpen) {
+      editor?.destroy()
+    }
+  }, [isOpen, editor])
+
+  // Reset form state when compose opens fresh (no replyTo)
+  useEffect(() => {
+    if (isOpen && !replyTo) {
+      setTo([])
+      setCc([])
+      setBcc([])
+      setSubject('')
+      setAttachments([])
+      setSendError(null)
+      setLastSaved(null)
+      editor?.commands.clearContent()
+      setBodyHtml('')
+    }
+  }, [isOpen, replyTo, editor])
 
   const addRecipient = (
     value: string,
@@ -141,6 +212,11 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
       return
     }
 
+    if (!editor || editor.isEmpty) {
+      setSendError('Please write a message')
+      return
+    }
+
     setIsSending(true)
     setSendError(null)
 
@@ -148,6 +224,8 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
 
     try {
       const serializedAttachments = await serializeAttachments(attachments)
+      const body = editor.getHTML()
+
       const res = await fetch('/api/gmail/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -181,8 +259,9 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
       setBcc([])
       setBccInput('')
       setSubject('')
-      setBody('')
       setAttachments([])
+      setBodyHtml('')
+      editor?.commands.clearContent()
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to send email'
       console.error('Send error:', error)
@@ -195,12 +274,13 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
   }
 
   const handleSaveDraft = () => {
+    if (!editor) return
     const draft: Draft = {
       to,
       cc,
       bcc,
       subject,
-      body,
+      body: editor.getHTML(),
     }
     saveDraft(draft)
     setLastSaved(new Date())
@@ -216,8 +296,9 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
         className="absolute inset-0 z-0 h-full w-full cursor-default"
         onClick={onClose}
       />
-      <div className="absolute inset-x-0 bottom-0 z-10 md:inset-auto md:bottom-4 md:right-4 md:left-auto md:w-[min(92vw,560px)]">
+      <div className="absolute inset-x-0 bottom-0 z-10 md:inset-auto md:bottom-4 md:right-4 md:left-auto md:left-[calc(50%-280px)] md:w-[min(92vw,560px)]">
         <div className="relative mx-auto flex h-[76dvh] flex-col overflow-hidden border border-border bg-background shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:mx-0 md:h-[min(620px,calc(100dvh-2rem))] md:rounded-2xl">
+          {/* Header */}
           <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
             <h2 className="font-mono text-sm font-semibold">
               {replyTo ? 'Reply' : 'New Message'}
@@ -227,6 +308,7 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
             </Button>
           </div>
 
+          {/* To */}
           <div className="flex items-center gap-2 border-b border-border px-4 py-2">
             <span className="w-10 font-mono text-sm text-muted-foreground">To:</span>
             <div className="flex flex-1 flex-wrap gap-1">
@@ -257,6 +339,7 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
             </div>
           </div>
 
+          {/* Cc / Bcc toggles */}
           <div className="flex items-center gap-2 border-b border-border px-4 py-2">
             <button
               type="button"
@@ -275,6 +358,7 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
             </button>
           </div>
 
+          {/* Cc field */}
           {(showCc || cc.length > 0) && (
             <div className="flex items-center gap-2 border-b border-border px-4 py-2">
               <span className="w-10 font-mono text-sm text-muted-foreground">Cc:</span>
@@ -307,6 +391,7 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
             </div>
           )}
 
+          {/* Bcc field */}
           {(showBcc || bcc.length > 0) && (
             <div className="flex items-center gap-2 border-b border-border px-4 py-2">
               <span className="w-10 font-mono text-sm text-muted-foreground">Bcc:</span>
@@ -339,6 +424,7 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
             </div>
           )}
 
+          {/* Subject */}
           <div className="flex items-center gap-2 border-b border-border px-4 py-2">
             <span className="w-10 font-mono text-sm text-muted-foreground">Sub:</span>
             <input
@@ -350,17 +436,18 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
             />
           </div>
 
+          {/* Editor area */}
           <div className="flex-1 overflow-hidden p-4">
             <ScrollArea className="h-full">
-              <Textarea
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="Write your message..."
-                className="min-h-[180px] h-full resize-none border-none bg-transparent font-mono text-sm"
+              {editor && <ComposeToolbar editor={editor} />}
+              <EditorContent
+                editor={editor}
+                className="[&_.ProseMirror]:min-h-[180px] [&_.ProseMirror]:outline-none [&_.ProseMirror]:font-mono [&_.ProseMirror]:text-sm [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none"
               />
             </ScrollArea>
           </div>
 
+          {/* Attachments */}
           {attachments.length > 0 && (
             <div className="border-t border-border px-4 py-2">
               <div className="flex flex-wrap gap-2">
@@ -384,12 +471,14 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
             </div>
           )}
 
+          {/* Error */}
           {sendError && (
             <div className="border-t border-destructive/20 bg-destructive/10 px-4 py-2">
               <p className="font-mono text-xs text-destructive">{sendError}</p>
             </div>
           )}
 
+          {/* Footer */}
           <div className="flex items-center justify-between border-t border-border bg-surface px-4 py-3">
             <div className="flex items-center gap-2">
               <Button
