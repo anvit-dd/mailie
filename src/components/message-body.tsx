@@ -98,9 +98,49 @@ function buildSrcdoc(html: string): string {
   //
   // The approach: parse the email HTML, prepend our viewer CSS to <head>, then
   // return the full document string as srcdoc.
+
+  // Detect "plain text" HTML — no <style> blocks, no inline CSS, no bgcolor/color attributes.
+  // These emails look like raw text with no styling; we make the background transparent
+  // so the host app's dark/light theme shows through the iframe edges.
+  function isPlainTextEmail(doc: Document): boolean {
+    // Check for <style> blocks (CSS rules in the email)
+    if (doc.querySelector('style')) return false
+    // Check for inline style attributes with meaningful properties
+    const styledEls = doc.querySelectorAll('[style]')
+    for (const el of styledEls) {
+      const style = el.getAttribute('style') || ''
+      if (/background|bgcolor|color\s*:|font-size|font-family|margin|padding|border/i.test(style)) {
+        return false
+      }
+    }
+    // Check for bgcolor attributes on body, table, td, tr, div
+    for (const tag of ['body', 'table', 'td', 'tr', 'div', 'center', 'font']) {
+      const els = doc.querySelectorAll(tag)
+      for (const el of els) {
+        if (el.hasAttribute('bgcolor')) return false
+        if (el.hasAttribute('text')) return false
+        if (el.hasAttribute('link')) return false
+        if (el.hasAttribute('vlink')) return false
+        if (el.hasAttribute('alink')) return false
+      }
+    }
+    // Check for font tags with color/size attrs
+    if (doc.querySelector('font[size], font[color]')) return false
+    // Check for <link> tags (often external stylesheets)
+    if (doc.querySelector('link[rel="stylesheet"]')) return false
+    return true
+  }
+
   try {
     const parser = new DOMParser()
     const document = parser.parseFromString(html, 'text/html')
+    const plainText = isPlainTextEmail(document)
+
+    // Inject --iframe-bg CSS variable on <html> so body background can reference it
+    const htmlEl = document.documentElement
+    const existingBg = htmlEl.getAttribute('style') || ''
+    htmlEl.setAttribute('style', existingBg + (existingBg ? ' ' : '') + `--iframe-bg: ${plainText ? 'transparent' : '#ffffff'};`)
+
     const headEl = document.querySelector('head')
     if (headEl) {
       // Prepend our viewer CSS to <head> (it cascades before email styles)
@@ -112,7 +152,7 @@ function buildSrcdoc(html: string): string {
     // Inject height measurement script by inserting it before </body>
     return fullDoc.replace('</body>', `${HEIGHT_MEASUREMENT_SCRIPT}</body>`)
   } catch {
-    // Fallback: return as-is
+    // Fallback: return as-is with white background (safe default)
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -172,10 +212,10 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
     <div className="flex flex-col h-full overflow-hidden">
       {/* Email body — optionally no padding when embedded in a padded container */}
       <div className={`flex-1 min-h-0 flex flex-col ${noPadding ? '' : 'p-4'}`}>
-        {/* Email body scroll container — parent handles scrolling when noPadding */}
+        {/* Email body — non-scrolling wrapper, iframe fills height and scrolls internally */}
         <div
           ref={scrollRef}
-          className={`flex-1 min-h-0 overflow-y-auto overscroll-y-contain ${noPadding ? '' : 'overflow-y-auto'}`}
+          className={`flex-1 min-h-0 ${noPadding ? '' : 'overflow-hidden'}`}
         >
           {isLoading && (
             <div className="mb-3">
@@ -197,13 +237,14 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
           {emailHtml && (
             <iframe
               ref={iframeRef}
-              className="block w-full border-0 bg-white"
+              className="block w-full border-0"
               style={{
                 display: 'block',
                 width: '100%',
                 height: '100%',
+                background: 'transparent',
               }}
-              sandbox="allow-same-origin allow-scripts"
+              sandbox="allow-scripts"
               title={`Email: ${selectedEmail.subject}`}
               srcDoc={buildSrcdoc(emailHtml)}
             />

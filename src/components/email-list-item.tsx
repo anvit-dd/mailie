@@ -133,20 +133,18 @@ export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps
             </div>
           </div>
 
-          {/* Labels */}
-          {email.labels.length > 0 && (
-            <div className="flex gap-1 mt-1">
-              {email.labels.slice(0, 2).map((label) => (
-                <Badge
-                  key={label}
-                  variant="outline"
-                  className="font-mono text-[9px] px-1 py-0 h-4"
-                >
-                  {label}
-                </Badge>
-              ))}
-            </div>
-          )}
+          {/* Labels — always reserve height so rows stay uniform */}
+          <div className={`flex gap-1 mt-1 ${email.labels.length === 0 ? 'h-4' : ''}`}>
+            {email.labels.slice(0, 2).map((label) => (
+              <Badge
+                key={label}
+                variant="outline"
+                className="font-mono text-[9px] px-1 py-0 h-4"
+              >
+                {label}
+              </Badge>
+            ))}
+          </div>
         </div>
       </div>
     </button>

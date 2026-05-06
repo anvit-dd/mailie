@@ -1,14 +1,15 @@
 export const EMAIL_VIEWER_CSS = `
-  /* 
-   * Minimal viewer reset. 
-   * 
-   * The email is an isolated HTML document — its own inline styles, bgcolor 
+  /*
+   * Minimal viewer reset.
+   *
+   * The email is an isolated HTML document — its own inline styles, bgcolor
    * attributes, and font tags are the SOLE authority on how it looks.
-   * 
+   *
    * This CSS only exists to:
    *   1. Reset browser defaults (margin/padding) so raw email HTML renders cleanly
    *   2. Prevent OS/browser dark mode from inverting email colors via color-scheme
-   *   3. Set a white background ONLY on <body> — for emails that set zero background.
+   *   3. Set a background on <body> — transparent for plain-text HTML emails,
+   *      white for styled emails. --iframe-bg is injected by buildSrcdoc().
    *      We don't touch .email-body, td, th, div, or any other element because
    *      doing so cascades and corrupts nested table structures (like Wellfound's
    *      dark header → white card layout).
@@ -23,9 +24,9 @@ export const EMAIL_VIEWER_CSS = `
   }
 
   body {
-    background: #ffffff;
+    background: var(--iframe-bg, #ffffff);
     /* Only set these so raw text in an email without ANY styling is readable.
-     * font-family and font-size are intentionally generic — email's inline styles 
+     * font-family and font-size are intentionally generic — email's inline styles
      * override these when present. */
     font-family: system-ui, -apple-system, sans-serif;
     font-size: 16px;
@@ -33,6 +34,7 @@ export const EMAIL_VIEWER_CSS = `
     color: #000000;
     word-break: break-word;
     overflow-wrap: break-word;
+    overflow: auto;
   }
 
   /* Leave everything else alone. Tables, tds, divs, fonts, centers —
