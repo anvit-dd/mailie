@@ -29,9 +29,10 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 
 interface MobileNavProps {
   onCompose: () => void
+  onSettingsOpen: () => void
 }
 
-export function MobileNav({ onCompose }: MobileNavProps) {
+export function MobileNav({ onCompose, onSettingsOpen }: MobileNavProps) {
   const { account, logout } = useAuth()
   const { folders, currentFolder, setCurrentFolder } = useEmail()
 
@@ -134,7 +135,7 @@ export function MobileNav({ onCompose }: MobileNavProps) {
             </div>
           </div>
           <div className="flex gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onSettingsOpen}>
               <Settings className="w-4 h-4" />
             </Button>
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleLogout}>

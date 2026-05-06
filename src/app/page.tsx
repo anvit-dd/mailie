@@ -9,6 +9,7 @@ import { EmailList } from '@/components/email-list'
 import { MessageView } from '@/components/message-view'
 import { MobileEmailView } from '@/components/mobile-email-view'
 import { Compose } from '@/components/compose'
+import { SettingsDialog } from '@/components/settings-dialog'
 import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
 
@@ -20,6 +21,7 @@ export default function Home() {
   const { isAuthenticated, isLoading, login } = useAuth()
   const { selectedEmail } = useEmail()
   const [isComposeOpen, setIsComposeOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [composeNonce, setComposeNonce] = useState(0)
   const [replyTo, setReplyTo] = useState<ComposeProps['replyTo'] | undefined>()
   const [listWidth, setListWidth] = useState(DEFAULT_LIST_WIDTH)
@@ -118,7 +120,7 @@ export default function Home() {
               <span className="text-muted-foreground">_</span>
             </h1>
             <p className="font-mono text-sm text-muted-foreground">
-              Minimal brutalist email client
+              Minimal email client
             </p>
           </div>
 
@@ -161,7 +163,7 @@ export default function Home() {
     <div className="flex h-screen bg-background">
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
-        <Sidebar onCompose={handleCompose} />
+        <Sidebar onCompose={handleCompose} onSettingsOpen={() => setIsSettingsOpen(true)} />
       </div>
 
       {/* Desktop: email list + message view */}
@@ -182,7 +184,7 @@ export default function Home() {
       <div className="flex flex-col flex-1 min-w-0 md:hidden">
         {/* Mobile top bar */}
         <div className="flex items-center gap-2 p-3 border-b border-border bg-surface shrink-0">
-          <MobileNav onCompose={handleCompose} />
+          <MobileNav onCompose={handleCompose} onSettingsOpen={() => setIsSettingsOpen(true)} />
           <span className="font-mono text-base font-bold tracking-tight">
             <span className="text-accent">mailie</span>
             <span className="text-muted-foreground">_</span>
@@ -202,6 +204,12 @@ export default function Home() {
           setReplyTo(undefined)
         }}
         replyTo={replyTo}
+      />
+
+      {/* Settings Dialog */}
+      <SettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
       />
     </div>
   )

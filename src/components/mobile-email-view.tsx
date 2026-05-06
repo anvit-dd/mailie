@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useEmail } from '@/contexts/email-context'
 import { EmailList } from './email-list'
 import { MessageBody } from './message-body'
@@ -12,7 +13,38 @@ interface MobileEmailViewProps {
 }
 
 export function MobileEmailView({ onReply, onForward }: MobileEmailViewProps) {
-  const { selectedEmail, setSelectedEmail } = useEmail()
+  const { selectedEmail, setSelectedEmail, loadEmailDetail } = useEmail()
+
+  // Load email from URL on mount / URL change
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const emailId = params.get('email')
+    if (emailId) {
+      loadEmailDetail(emailId)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Push ?email={id} to history when an email is opened
+  useEffect(() => {
+    if (selectedEmail) {
+      const url = new URL(window.location.href)
+      url.searchParams.set('email', selectedEmail.id)
+      window.history.pushState({ emailId: selectedEmail.id }, '', url.toString())
+    }
+  }, [selectedEmail?.id])
+
+  // Handle browser back button — close email when navigating back
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search)
+      if (!params.get('email')) {
+        setSelectedEmail(null)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [setSelectedEmail])
 
   if (!selectedEmail) {
     return (
@@ -26,6 +58,13 @@ export function MobileEmailView({ onReply, onForward }: MobileEmailViewProps) {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   }
 
+  const handleBack = () => {
+    setSelectedEmail(null)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('email')
+    window.history.pushState({}, '', url.toString())
+  }
+
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-background">
       {/* ── Top bar ─────────────────────────────────────── */}
@@ -35,7 +74,7 @@ export function MobileEmailView({ onReply, onForward }: MobileEmailViewProps) {
           variant="ghost"
           size="icon"
           className="h-8 w-8 shrink-0"
-          onClick={() => setSelectedEmail(null)}
+          onClick={handleBack}
         >
           <ChevronLeft className="w-5 h-5" />
         </Button>

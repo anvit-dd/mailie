@@ -28,9 +28,10 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 
 interface SidebarProps {
   onCompose: () => void
+  onSettingsOpen: () => void
 }
 
-export function Sidebar({ onCompose }: SidebarProps) {
+export function Sidebar({ onCompose, onSettingsOpen }: SidebarProps) {
   const { account, logout } = useAuth()
   const { folders, currentFolder, setCurrentFolder } = useEmail()
 
@@ -122,7 +123,7 @@ export function Sidebar({ onCompose }: SidebarProps) {
           </div>
         </div>
         <div className="flex gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onSettingsOpen}>
             <Settings className="w-4 h-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleLogout}>

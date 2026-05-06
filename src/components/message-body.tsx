@@ -15,9 +15,9 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
-// Script injected into the srcdoc iframe to measure height and post to parent.
-// Uses ResizeObserver to track content height changes (images, collapsed sections, etc.)
-// and posts the scrollHeight to the parent via postMessage.
+// Script injected into the srcdoc iframe to:
+// 1. Measure content height and post to parent (ResizeObserver + MutationObserver)
+// 2. Intercept all link clicks and forward them to the parent to open in a new tab
 const HEIGHT_MEASUREMENT_SCRIPT = `
 <script>
 (function() {
@@ -74,6 +74,17 @@ const HEIGHT_MEASUREMENT_SCRIPT = `
   } else {
     window.addEventListener('load', function() { setTimeout(sendHeight, 100); });
   }
+
+  // Intercept all link clicks and forward to parent to open in new tab
+  document.addEventListener('click', function(e) {
+    var link = e.target.closest ? e.target.closest('a') : null;
+    if (link && link.href) {
+      e.preventDefault();
+      try {
+        parent.postMessage({ type: 'iframeLinkClick', url: link.href }, '*');
+      } catch(err) {}
+    }
+  });
 })();
 </script>
 `
@@ -121,13 +132,12 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
   const [emailHtml, setEmailHtml] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [iframeHeight, setIframeHeight] = useState<number | undefined>(undefined)
 
-  // Listen for height messages from the iframe
+  // Listen for link clicks from the iframe — open them in a new tab
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (event.data?.type === 'iframeHeight' && typeof event.data.height === 'number') {
-        setIframeHeight(event.data.height)
+      if (event.data?.type === 'iframeLinkClick' && event.data?.url) {
+        window.open(event.data.url, '_blank', 'noopener,noreferrer')
       }
     }
     window.addEventListener('message', handleMessage)
@@ -191,10 +201,9 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
               style={{
                 display: 'block',
                 width: '100%',
-                height: iframeHeight ? `${iframeHeight}px` : '100%',
-                overflow: 'auto',
+                height: '100%',
               }}
-              sandbox="allow-same-origin"
+              sandbox="allow-same-origin allow-scripts"
               title={`Email: ${selectedEmail.subject}`}
               srcDoc={buildSrcdoc(emailHtml)}
             />
