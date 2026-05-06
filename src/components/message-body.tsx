@@ -136,7 +136,9 @@ function buildSrcdoc(html: string): string {
     const document = parser.parseFromString(html, 'text/html')
     const plainText = isPlainTextEmail(document)
 
-    // Inject --iframe-bg CSS variable on <html> so body background can reference it
+    // Inject --iframe-bg CSS variable on <html> so body background can reference it.
+    // Plain-text emails: background=transparent (host app theme shows through).
+    // Styled emails: background=#ffffff (email's own attrs override everything).
     const htmlEl = document.documentElement
     const existingBg = htmlEl.getAttribute('style') || ''
     htmlEl.setAttribute('style', existingBg + (existingBg ? ' ' : '') + `--iframe-bg: ${plainText ? 'transparent' : '#ffffff'};`)

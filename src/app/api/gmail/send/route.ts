@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, getAccountWithTokens } from '@/lib/session'
 import { getValidGmailAccessToken } from '@/lib/gmail'
-import { escapeHtml } from '@/lib/gmail-utils'
+import { stripHtml } from '@/lib/gmail-utils'
 
 interface AttachmentInput {
   filename: string
@@ -24,60 +24,64 @@ function buildMimeMessage(params: {
   attachments?: AttachmentInput[]
 }): string {
   const hasAttachments = Boolean(params.attachments?.length)
-  const boundary = `mailie_${Date.now()}_${Math.random().toString(16).slice(2)}`
+  // Multipart/alternative is always used — even without attachments — because
+  // Gmail API silently converts bare text/html to text/plain (no rendering).
   const innerBoundary = `mailie_alt_${Date.now()}_${Math.random().toString(16).slice(2)}`
-  const lines: string[] = []
+  const headerLines: string[] = []
+  headerLines.push(`To: ${params.to.join(', ')}`)
+  if (params.cc?.length) headerLines.push(`Cc: ${params.cc.join(', ')}`)
+  if (params.bcc?.length) headerLines.push(`Bcc: ${params.bcc.join(', ')}`)
+  headerLines.push(`Subject: ${params.subject}`)
+  headerLines.push('MIME-Version: 1.0')
+  headerLines.push(`Content-Type: multipart/alternative; boundary="${innerBoundary}"`)
+  if (params.inReplyTo) headerLines.push(`In-Reply-To: ${params.inReplyTo}`)
+  if (params.references) headerLines.push(`References: ${params.references}`)
 
-  lines.push(`To: ${params.to.join(', ')}`)
-  if (params.cc?.length) lines.push(`Cc: ${params.cc.join(', ')}`)
-  if (params.bcc?.length) lines.push(`Bcc: ${params.bcc.join(', ')}`)
-  lines.push(`Subject: ${params.subject}`)
-  lines.push('MIME-Version: 1.0')
+  // Part 1: plain text (Gmail API auto-generates this anyway, but we provide it)
+  const bodyLines: string[] = []
+  bodyLines.push('')
+  bodyLines.push(`--${innerBoundary}`)
+  bodyLines.push('Content-Type: text/plain; charset=utf-8')
+  bodyLines.push('Content-Transfer-Encoding: 7bit')
+  bodyLines.push('')
+  bodyLines.push(stripHtml(params.body))
 
-  if (params.inReplyTo) lines.push(`In-Reply-To: ${params.inReplyTo}`)
-  if (params.references) lines.push(`References: ${params.references}`)
+  // Part 2: HTML (TipTap already outputs proper HTML — send raw)
+  // Use base64 encoding for the HTML part — most reliable for Gmail API
+  const htmlBytes = Buffer.from(params.body, 'utf-8')
+  const htmlBase64 = htmlBytes.toString('base64')
+  const wrappedHtmlBase64 = wrapBase64(htmlBase64)
+  bodyLines.push('')
+  bodyLines.push(`--${innerBoundary}`)
+  bodyLines.push('Content-Type: text/html; charset=utf-8')
+  bodyLines.push('Content-Transfer-Encoding: base64')
+  bodyLines.push('')
+  bodyLines.push(wrappedHtmlBase64)
+  bodyLines.push(`--${innerBoundary}--`)
 
   if (hasAttachments) {
-    lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`)
-    lines.push('')
-    lines.push(`--${boundary}`)
-    lines.push(`Content-Type: multipart/alternative; boundary="${innerBoundary}"`)
-    lines.push('')
-    lines.push(`--${innerBoundary}`)
-    lines.push('Content-Type: text/plain; charset=utf-8')
-    lines.push('Content-Transfer-Encoding: 7bit')
-    lines.push('')
-    lines.push(params.body)
-    lines.push('')
-    lines.push(`--${innerBoundary}`)
-    lines.push('Content-Type: text/html; charset=utf-8')
-    lines.push('Content-Transfer-Encoding: 7bit')
-    lines.push('')
-    lines.push(escapeHtml(params.body).replace(/\n/g, '<br>'))
-    lines.push('')
-    lines.push(`--${innerBoundary}--`)
-
+    const mixedBoundary = `mailie_${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const mixedLines: string[] = []
+    mixedLines.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`)
+    mixedLines.push('')
+    mixedLines.push(`--${mixedBoundary}`)
+    mixedLines.push(headerLines.join('\r\n') + '\r\n\r\n' + bodyLines.join('\r\n'))
     for (const attachment of params.attachments ?? []) {
-      lines.push('')
-      lines.push(`--${boundary}`)
-      lines.push(`Content-Type: ${attachment.mimeType}; name="${attachment.filename.replace(/"/g, '')}"`)
-      lines.push('Content-Transfer-Encoding: base64')
-      lines.push(`Content-Disposition: attachment; filename="${attachment.filename.replace(/"/g, '')}"`)
-      lines.push('')
-      lines.push(wrapBase64(attachment.data))
+      mixedLines.push('')
+      mixedLines.push(`--${mixedBoundary}`)
+      mixedLines.push(`Content-Type: ${attachment.mimeType}; name="${attachment.filename.replace(/"/g, '')}"`)
+      mixedLines.push('Content-Transfer-Encoding: base64')
+      mixedLines.push(`Content-Disposition: attachment; filename="${attachment.filename.replace(/"/g, '')}"`)
+      mixedLines.push('')
+      mixedLines.push(wrapBase64(attachment.data))
     }
-
-    lines.push('')
-    lines.push(`--${boundary}--`)
-    return lines.join('\r\n')
+    mixedLines.push('')
+    mixedLines.push(`--${mixedBoundary}--`)
+    return mixedLines.join('\r\n')
   }
 
-  lines.push('Content-Type: text/html; charset=utf-8')
-  lines.push('Content-Transfer-Encoding: 7bit')
-  lines.push('')
-  lines.push(escapeHtml(params.body).replace(/\n/g, '<br>'))
-
-  return lines.join('\r\n')
+  // No attachments — multipart/alternative is the entire message body
+  return headerLines.join('\r\n') + '\r\n\r\n' + bodyLines.join('\r\n')
 }
 
 export async function POST(request: NextRequest) {

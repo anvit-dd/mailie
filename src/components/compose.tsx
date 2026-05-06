@@ -79,6 +79,7 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
   const initialBodyHtml = replyTo?.body || ''
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },

@@ -7,8 +7,7 @@ export const EMAIL_VIEWER_CSS = `
    *
    * This CSS only exists to:
    *   1. Reset browser defaults (margin/padding) so raw email HTML renders cleanly
-   *   2. Prevent OS/browser dark mode from inverting email colors via color-scheme
-   *   3. Set a background on <body> — transparent for plain-text HTML emails,
+   *   2. Set a background on <body> — transparent for plain-text HTML emails,
    *      white for styled emails. --iframe-bg is injected by buildSrcdoc().
    *      We don't touch .email-body, td, th, div, or any other element because
    *      doing so cascades and corrupts nested table structures (like Wellfound's
@@ -19,8 +18,6 @@ export const EMAIL_VIEWER_CSS = `
     height: 100%;
     margin: 0;
     padding: 0;
-    /* Prevent OS-level dark mode from inverting the email's colors */
-    color-scheme: light;
   }
 
   body {
@@ -40,4 +37,12 @@ export const EMAIL_VIEWER_CSS = `
   /* Leave everything else alone. Tables, tds, divs, fonts, centers —
    * the email's own bgcolor attributes and inline styles decide their appearance.
    * We do NOT cascade anything. */
+
+  @media (prefers-color-scheme: dark) {
+    body {
+      /* Plain-text emails (no inline color): show light text so it's readable on dark bg.
+       * Styled emails are unaffected — their inline color attrs have higher specificity. */
+      color: #e8e8e8;
+    }
+  }
 `
