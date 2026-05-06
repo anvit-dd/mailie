@@ -3,7 +3,6 @@
 import { useEmail } from '@/contexts/email-context'
 import { MessageHeader } from './message-header'
 import { MessageBody } from './message-body'
-import { RefreshCw } from 'lucide-react'
 
 interface MessageViewProps {
   onReply: () => void

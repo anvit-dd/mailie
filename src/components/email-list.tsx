@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useEmail } from '@/contexts/email-context'
 import { EmailListItem } from './email-list-item'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -23,9 +23,6 @@ export function EmailList() {
     pendingEmailId,
   } = useEmail()
 
-  // Debounce search so API fires only after user stops typing for 300ms
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   const handleSearchChange = (value: string) => {
     setSearchQuery(value)
     // Debounce the API call — searchQuery dep in useEffect handles the actual fetch
@@ -34,7 +31,7 @@ export function EmailList() {
   useEffect(() => {
     setSelectedEmail(null)
     refreshEmails()
-  }, [currentFolder.id, searchQuery])
+  }, [currentFolder.id, searchQuery, refreshEmails, setSelectedEmail])
 
   return (
     <div className="flex flex-col h-full border-r border-border bg-background">

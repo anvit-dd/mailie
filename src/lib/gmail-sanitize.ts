@@ -1,58 +1,36 @@
-// @ts-ignore - DOMPurify's CJS typings require a synthetic default import here.
-import createDOMPurify from 'dompurify'
-import { JSDOM } from 'jsdom'
+function stripUnsafeTags(html: string): string {
+  return html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, '')
+    .replace(/<iframe\b[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<object\b[\s\S]*?<\/object>/gi, '')
+    .replace(/<embed\b[\s\S]*?<\/embed>/gi, '')
+    .replace(/<form\b[\s\S]*?<\/form>/gi, '')
+}
 
-const domWindow = new JSDOM('').window
-const DOMPurify = createDOMPurify(domWindow as never)
+function stripEventHandlers(html: string): string {
+  return html.replace(/\son[a-z-]+\s*=\s*(".*?"|'.*?'|[^\s>]+)/gi, '')
+}
 
-/**
- * Rewrites image URLs in HTML so they go through our proxy:
- * - https://  → /api/gmail/proxy?url=<encoded>
- * - http://   → /api/gmail/proxy?url=<encoded>  (avoids browser mixed-content blocking)
- * - cid:     → /api/gmail/proxy?cid=<value>&messageId=<id>  (inline attachments, fetch via Gmail API)
- *
- * IMPORTANT: returns the FULL document HTML (not just body.innerHTML) so that
- * <head> content (viewport meta, <style> blocks, etc.) is preserved. If we return
- * only body.innerHTML, the email's entire CSS is lost before buildSrcdoc() runs.
- */
 function proxyImageUrls(html: string, messageId?: string): string {
-  const dom = new JSDOM(html)
-  const { document } = dom.window
-
-  document.querySelectorAll('img[src]').forEach((img) => {
-    const src = img.getAttribute('src') || ''
+  return html.replace(/<img\b([^>]*?)src=(["'])(.*?)\2([^>]*)>/gi, (_match, before, quote, src, after) => {
     let proxyUrl = ''
 
-    if (src.startsWith('https://') || src.startsWith('http://')) {
-      // External images: proxy through our server so auth cookies are sent
+    if (/^https?:\/\//i.test(src)) {
       proxyUrl = `/api/gmail/proxy?url=${encodeURIComponent(src)}`
-    } else if (src.startsWith('cid:')) {
-      // Inline attachment (Gmail's cid: scheme) → proxy resolves it via Gmail attachments API
-      // messageId is required for CID lookups so we can find the right attachment
+    } else if (/^cid:/i.test(src)) {
       const cidValue = src.slice(4)
       proxyUrl = `/api/gmail/proxy?cid=${encodeURIComponent(cidValue)}${messageId ? `&messageId=${encodeURIComponent(messageId)}` : ''}`
     }
 
-    if (proxyUrl) {
-      img.setAttribute('src', proxyUrl)
+    if (!proxyUrl) {
+      return `<img${before}src=${quote}${src}${quote}${after}>`
     }
-  })
 
-  // Return the FULL document so <head> and all its contents are preserved.
-  // JSDOM always produces a complete document structure even if the input was
-  // a body-only fragment, so outerHTML gives us the complete HTML with <html>/<head>/<body>.
-  return document.documentElement.outerHTML
+    return `<img${before}src=${quote}${proxyUrl}${quote}${after}>`
+  })
 }
 
 export function sanitizeAndProxyEmailHtml(html: string, messageId?: string): string {
-  const sanitized = DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    // Allow <style> tags and inline style attributes so email CSS (background-color,
-    // border-radius, padding, etc.) survives sanitization. DOMPurify strips these by
-    // default even with html:true profile.
-    ADD_TAGS: ['style'],
-    ADD_ATTR: ['style'],
-  })
-
-  return proxyImageUrls(sanitized, messageId)
+  const stripped = stripUnsafeTags(stripEventHandlers(html))
+  return proxyImageUrls(stripped, messageId)
 }

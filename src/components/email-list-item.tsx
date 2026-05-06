@@ -4,6 +4,7 @@ import { Email } from '@/types/email'
 import { Badge } from '@/components/ui/badge'
 import { Paperclip, Star } from 'lucide-react'
 import { useEmail } from '@/contexts/email-context'
+import Image from 'next/image'
 
 function formatRelativeDate(date: Date): string {
   const now = new Date()
@@ -61,9 +62,12 @@ export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps
         {/* Sender avatar */}
         <div className="mt-0.5 shrink-0">
           {avatarUrl ? (
-            <img
+            <Image
               src={avatarUrl}
               alt={email.from.name || email.from.email}
+              width={32}
+              height={32}
+              unoptimized
               className={`w-8 h-8 rounded-full object-cover ${email.isRead ? 'opacity-60' : ''}`}
               onError={(e) => {
                 const target = e.currentTarget as HTMLImageElement

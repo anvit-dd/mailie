@@ -134,22 +134,9 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
     return () => window.removeEventListener('message', handleMessage)
   }, [])
 
-  // Reset iframe height when email changes
-  useEffect(() => {
-    setIframeHeight(undefined)
-  }, [selectedEmail.id])
-
   // Fetch email body HTML when a new email is selected
   useEffect(() => {
-    // Reset state for new email
-    setEmailHtml(null)
-    setIsLoading(true)
-    setError(null)
-    setIframeHeight(undefined)
-
     if (!selectedEmail.body && !selectedEmail.bodyPlain) {
-      // Nothing to show
-      setIsLoading(false)
       return
     }
 
@@ -173,7 +160,7 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
       })
 
     return () => controller.abort()
-  }, [selectedEmail.id])
+  }, [selectedEmail.body, selectedEmail.bodyPlain, selectedEmail.id])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -255,7 +242,21 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
                       {formatBytes(attachment.size)}
                     </p>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => {
+                      const url = `/api/gmail/attachment?messageId=${encodeURIComponent(selectedEmail.id)}&attachmentId=${encodeURIComponent(attachment.id)}&filename=${encodeURIComponent(attachment.filename)}&mimeType=${encodeURIComponent(attachment.mimeType)}`
+                      const link = document.createElement('a')
+                      link.href = url
+                      link.download = attachment.filename
+                      link.rel = 'noopener'
+                      document.body.appendChild(link)
+                      link.click()
+                      link.remove()
+                    }}
+                  >
                     <Download className="w-3 h-3" />
                   </Button>
                 </div>

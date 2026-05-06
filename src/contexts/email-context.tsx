@@ -73,12 +73,9 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   const [emailCache, setEmailCache] = useState<Record<string, GmailMessage>>({})
   // Keep a ref in sync with cache so loadEmailDetail can read it without needing it in deps
   const emailCacheRef = useRef<Record<string, GmailMessage>>({})
-  emailCacheRef.current = emailCache
 
   // Ref to avoid searchQuery causing refreshEmails recreation on every keystroke
   const searchQueryRef = useRef(searchQuery)
-  // Keep ref in sync with state
-  searchQueryRef.current = searchQuery
 
   // Debounce ref — tracks the last query we actually fired an API call for
   // Initialize with undefined sentinel so first call (empty string) always goes through
@@ -88,6 +85,14 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     lastFiredQueryRef.current = undefined
   }, [currentFolder.id])
+
+  useEffect(() => {
+    emailCacheRef.current = emailCache
+  }, [emailCache])
+
+  useEffect(() => {
+    searchQueryRef.current = searchQuery
+  }, [searchQuery])
 
   const refreshEmails = useCallback(async () => {
     // Debounce: skip if we've already fired for this exact query
