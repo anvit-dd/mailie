@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState, type ChangeEvent, type Dispatch, type KeyboardEvent, type SetStateAction } from 'react'
+import { useEffect, useState, useMemo, useRef, type ChangeEvent, type Dispatch, type KeyboardEvent, type SetStateAction } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useEmail } from '@/contexts/email-context'
+import { useAuth } from '@/contexts/auth-context'
 import { toast } from 'sonner'
-import { X, Send, Paperclip, Loader2 } from 'lucide-react'
+import { X, Send, Paperclip, Loader2, Image as ImageIcon } from 'lucide-react'
 import type { Draft } from '@/types/email'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -20,6 +21,8 @@ import { Highlight } from '@tiptap/extension-highlight'
 import { TextAlign } from '@tiptap/extension-text-align'
 import { FontFamily } from '@tiptap/extension-font-family'
 import { ComposeToolbar } from './compose-toolbar'
+import { ContactAutocomplete } from './contact-autocomplete'
+import { recordContact } from './contact-autocomplete'
 
 const AlignableImage = Image.extend({
   addAttributes() {
@@ -175,6 +178,7 @@ function serializeImageAlignment(html: string): string {
 
 export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposeProps) {
   const { saveDraft } = useEmail()
+  const { provider } = useAuth()
 
   const [to, setTo] = useState<string[]>(() => (replyTo?.to ? [replyTo.to] : []))
   const [toInput, setToInput] = useState('')
@@ -184,6 +188,11 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
   const [bccInput, setBccInput] = useState('')
   const [showCc, setShowCc] = useState(false)
   const [showBcc, setShowBcc] = useState(false)
+
+  // Stable arrays for useMemo deps in ContactAutocomplete
+  const excludeEmailsTo = useMemo(() => cc.concat(bcc), [cc, bcc])
+  const excludeEmailsCc = useMemo(() => to.concat(bcc), [to, bcc])
+  const excludeEmailsBcc = useMemo(() => to.concat(cc), [to, cc])
   const [subject, setSubject] = useState(
     replyTo?.subject ? (replyTo.subject.startsWith('Re:') ? replyTo.subject : `Re: ${replyTo.subject}`) : ''
   )
@@ -191,6 +200,32 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+
+  function getImageDimensions(src: string): Promise<{ width: number; height: number }> {
+    return new Promise((resolve) => {
+      const img = new window.Image()
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
+      img.src = src
+    })
+  }
+
+  function handleImageAttach() {
+    imageInputRef.current?.click()
+  }
+
+  function handleImageFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !editor) return
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      const src = ev.target?.result as string
+      const { width, height } = await getImageDimensions(src)
+      editor.chain().focus().setImage({ src, width, height }).run()
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
 
   // Initialize body HTML — empty for mailie replies (no auto-quote policy),
   // or the raw replyTo.body if it contains HTML from a forwarded email.
@@ -394,7 +429,9 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
       const serializedAttachments = await serializeAttachments(attachments)
       const body = serializeImageAlignment(await materializeInlineImages(editor.getHTML()))
 
-      const res = await fetch('/api/gmail/send', {
+      const isSmtpImap = provider === 'smtp_imap'
+      const endpoint = isSmtpImap ? '/api/smtp/send' : '/api/gmail/send'
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -402,10 +439,10 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
           cc,
           bcc,
           subject,
-          body,
+          html: body,
           attachments: serializedAttachments,
           inReplyTo: replyTo?.inReplyTo,
-          references: replyTo?.references,
+          references: replyTo?.references ? replyTo.references.split(' ') : undefined,
           threadId: replyTo?.threadId,
         }),
       })
@@ -415,6 +452,8 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
         throw new Error(err.error || 'Failed to send email')
       }
 
+      to.forEach((email) => recordContact(email))
+      cc.forEach((email) => recordContact(email))
       onClose()
       toast.success('Email sent', {
         description: `To: ${to.join(', ')}${cc.length ? ` · Cc: ${cc.join(', ')}` : ''}${bcc.length ? ' · Bcc: hidden' : ''}`,
@@ -460,21 +499,6 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
   if (inline) {
     return (
       <div className="flex flex-col h-full border-t border-[var(--sidebar-border)] bg-[var(--card)]">
-        {/* Inline header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)]">
-          <h2 className="font-mono text-xs font-semibold text-[var(--foreground)]">
-            {replyTo ? 'Reply' : 'New Message'}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-6 h-6 flex items-center justify-center rounded-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-elevated)] transition-colors"
-            aria-label="Close compose"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
         {/* To */}
         <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--border)]">
           <span className="w-6 font-mono text-[11px] text-muted-foreground shrink-0">To:</span>
@@ -494,17 +518,99 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
                 </button>
               </Badge>
             ))}
-            <input
-              type="email"
+            <ContactAutocomplete
               value={toInput}
-              onChange={(e) => setToInput(e.target.value)}
-              onKeyDown={(e) => handleRecipientKeyDown(e, toInput, to, setTo, setToInput)}
-              onBlur={() => addRecipient(toInput, to, setTo, setToInput)}
+              onChange={setToInput}
+              onAdd={(email) => addRecipient(email, to, setTo, setToInput)}
+              excludeEmails={excludeEmailsTo}
               placeholder={to.length === 0 ? ' recipient' : ''}
               className="min-w-[80px] flex-1 border-none bg-transparent font-mono text-[11px] outline-none placeholder:text-muted-foreground"
             />
           </div>
         </div>
+
+        {/* Cc / Bcc toggles */}
+        <div className="flex items-center gap-1.5 border-b border-[var(--border)] px-3 py-1">
+          <button
+            type="button"
+            onClick={() => setShowCc((v) => !v)}
+            className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
+          >
+            {showCc ? 'Hide Cc' : 'Cc'}
+          </button>
+          <span className="text-muted-foreground">·</span>
+          <button
+            type="button"
+            onClick={() => setShowBcc((v) => !v)}
+            className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
+          >
+            {showBcc ? 'Hide Bcc' : 'Bcc'}
+          </button>
+        </div>
+
+        {/* Cc field */}
+        {(showCc || cc.length > 0) && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--border)]">
+            <span className="w-6 font-mono text-[11px] text-muted-foreground shrink-0">Cc:</span>
+            <div className="flex flex-1 flex-wrap gap-1">
+              {cc.map((email) => (
+                <Badge
+                  key={email}
+                  variant="secondary"
+                  className="font-mono text-[10px] gap-0.5 pr-0.5 h-5"
+                >
+                  {email}
+                  <button
+                    onClick={() => removeRecipient(email, cc, setCc)}
+                    className="hover:text-destructive"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </Badge>
+              ))}
+              <ContactAutocomplete
+                value={ccInput}
+                onChange={setCcInput}
+                onAdd={(email) => addRecipient(email, cc, setCc, setCcInput)}
+                excludeEmails={excludeEmailsCc}
+                placeholder={cc.length === 0 ? ' copy' : ''}
+                className="min-w-[80px] flex-1 border-none bg-transparent font-mono text-[11px] outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Bcc field */}
+        {(showBcc || bcc.length > 0) && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--border)]">
+            <span className="w-6 font-mono text-[11px] text-muted-foreground shrink-0">Bcc:</span>
+            <div className="flex flex-1 flex-wrap gap-1">
+              {bcc.map((email) => (
+                <Badge
+                  key={email}
+                  variant="secondary"
+                  className="font-mono text-[10px] gap-0.5 pr-0.5 h-5"
+                >
+                  {email}
+                  <button
+                    onClick={() => removeRecipient(email, bcc, setBcc)}
+                    className="hover:text-destructive"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </Badge>
+              ))}
+              <ContactAutocomplete
+                value={bccInput}
+                onChange={setBccInput}
+                onAdd={(email) => addRecipient(email, bcc, setBcc, setBccInput)}
+                excludeEmails={excludeEmailsBcc}
+                placeholder={bcc.length === 0 ? ' hidden' : ''}
+                className="min-w-[80px] flex-1 border-none bg-transparent font-mono text-[11px] outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Subject */}
         <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--border)]">
@@ -520,50 +626,68 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
 
         {/* Editor — scrolls internally */}
         <div className="flex-1 overflow-y-auto p-2">
-          {editor && <ComposeToolbar editor={editor} />}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageFileChange}
+          />
           <EditorContent
             editor={editor}
-            className="[&_.ProseMirror]:min-h-[120px] [&_.ProseMirror]:outline-none [&_.ProseMirror]:font-sans [&_.ProseMirror]:text-[12px] [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none"
+            className=" [&_.ProseMirror]:min-h-[400px] [&_.ProseMirror]:outline-none [&_.ProseMirror]:font-sans [&_.ProseMirror]:text-[12px] [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none"
           />
         </div>
 
-        {/* Inline footer */}
-        <div className="flex items-center justify-between px-3 py-2 border-t border-[var(--border)]">
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => document.getElementById('inline-attachment-input')?.click()}
-            >
-              <Paperclip className="w-3 h-3" />
-              <input
-                id="inline-attachment-input"
-                type="file"
-                multiple
-                onChange={handleFileChange}
-                className="hidden"
-              />
-            </Button>
-          </div>
-          <div className="flex items-center gap-1">
-            {sendError && (
-              <span className="font-mono text-[10px] text-destructive mr-1">{sendError}</span>
-            )}
-            <Button
-              onClick={handleSend}
-              disabled={isSending}
-              size="sm"
-              className="font-mono text-[11px] h-6 px-2 bg-accent text-background hover:bg-accent/90"
-            >
-              {isSending ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Send className="w-3 h-3" />
+        {/* Formatting toolbar + action bar — merged into one row */}
+        {editor && (
+          <div className="flex items-center justify-between px-2 py-1.5 border-t border-[var(--border)]">
+            <div className="flex-1 overflow-x-auto">
+              <ComposeToolbar editor={editor} onImageAttach={handleImageAttach} />
+            </div>
+            <div className="flex items-center gap-1 shrink-0 ml-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => document.getElementById('inline-attachment-input')?.click()}
+              >
+                <Paperclip className="w-3 h-3" />
+                <input
+                  id="inline-attachment-input"
+                  type="file"
+                  multiple
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={handleImageAttach}
+                title="Insert image"
+              >
+                <ImageIcon className="w-3 h-3" />
+              </Button>
+              {sendError && (
+                <span className="font-mono text-[10px] text-destructive mr-1">{sendError}</span>
               )}
-            </Button>
+              <Button
+                onClick={handleSend}
+                disabled={isSending}
+                size="sm"
+                className="font-mono text-[11px] h-6 px-2 bg-accent text-background hover:bg-accent/90"
+              >
+                {isSending ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Send className="w-3 h-3" />
+                )}
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     )
   }
@@ -578,7 +702,7 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
         onClick={onClose}
       />
       <div className="absolute inset-x-0 bottom-0 z-10 md:inset-auto md:bottom-4 md:right-4 md:left-auto md:left-[calc(50%-280px)] md:w-[min(92vw,560px)]">
-        <div className="relative mx-auto flex h-[76dvh] flex-col overflow-hidden border border-border bg-background shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:mx-0 md:h-[min(620px,calc(100dvh-2rem))] md:rounded-2xl">
+        <div className="relative mx-auto flex h-[76dvh] flex-col overflow-hidden border border-border bg-background shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:mx-0 md:h-[min(900px,calc(100dvh-2rem))] md:rounded-2xl">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
             <h2 className="font-mono text-sm font-semibold">
@@ -608,12 +732,11 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
                   </button>
                 </Badge>
               ))}
-              <input
-                type="email"
+              <ContactAutocomplete
                 value={toInput}
-                onChange={(e) => setToInput(e.target.value)}
-                onKeyDown={(e) => handleRecipientKeyDown(e, toInput, to, setTo, setToInput)}
-                onBlur={() => addRecipient(toInput, to, setTo, setToInput)}
+                onChange={setToInput}
+                onAdd={(email) => addRecipient(email, to, setTo, setToInput)}
+                excludeEmails={excludeEmailsTo}
                 placeholder={to.length === 0 ? ' recipient@example.com' : ''}
                 className="min-w-[200px] flex-1 border-none bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground"
               />
@@ -659,12 +782,11 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
                     </button>
                   </Badge>
                 ))}
-                <input
-                  type="email"
+                <ContactAutocomplete
                   value={ccInput}
-                  onChange={(e) => setCcInput(e.target.value)}
-                  onKeyDown={(e) => handleRecipientKeyDown(e, ccInput, cc, setCc, setCcInput)}
-                  onBlur={() => addRecipient(ccInput, cc, setCc, setCcInput)}
+                  onChange={setCcInput}
+                  onAdd={(email) => addRecipient(email, cc, setCc, setCcInput)}
+                  excludeEmails={excludeEmailsCc}
                   placeholder={cc.length === 0 ? ' copy@example.com' : ''}
                   className="min-w-[200px] flex-1 border-none bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground"
                 />
@@ -692,12 +814,11 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
                     </button>
                   </Badge>
                 ))}
-                <input
-                  type="email"
+                <ContactAutocomplete
                   value={bccInput}
-                  onChange={(e) => setBccInput(e.target.value)}
-                  onKeyDown={(e) => handleRecipientKeyDown(e, bccInput, bcc, setBcc, setBccInput)}
-                  onBlur={() => addRecipient(bccInput, bcc, setBcc, setBccInput)}
+                  onChange={setBccInput}
+                  onAdd={(email) => addRecipient(email, bcc, setBcc, setBccInput)}
+                  excludeEmails={excludeEmailsBcc}
                   placeholder={bcc.length === 0 ? ' hidden@example.com' : ''}
                   className="min-w-[200px] flex-1 border-none bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground"
                 />
@@ -720,13 +841,67 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
           {/* Editor area */}
           <div className="flex-1 overflow-hidden p-4">
             <ScrollArea className="h-full">
-              {editor && <ComposeToolbar editor={editor} />}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageFileChange}
+              />
               <EditorContent
                 editor={editor}
                 className="[&_.ProseMirror]:min-h-[180px] [&_.ProseMirror]:outline-none [&_.ProseMirror]:font-sans [&_.ProseMirror]:text-sm [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none"
               />
             </ScrollArea>
           </div>
+
+          {/* Formatting toolbar + footer — merged */}
+          {editor && (
+            <div className="flex items-center justify-between px-4 py-1.5 border-t border-border">
+              <div className="flex-1 overflow-x-auto">
+                <ComposeToolbar editor={editor} onImageAttach={handleImageAttach} />
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => document.getElementById('attachment-input')?.click()}
+                >
+                  <Paperclip className="w-4 h-4" />
+                  <input
+                    id="attachment-input"
+                    type="file"
+                    multiple
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={handleImageAttach}
+                  title="Insert image"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSaveDraft}
+                  className="font-mono text-xs h-8"
+                >
+                  Save draft
+                </Button>
+                {lastSaved && (
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    Saved {lastSaved.toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Attachments */}
           {attachments.length > 0 && (
@@ -759,38 +934,8 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
             </div>
           )}
 
-          {/* Footer */}
-          <div className="flex items-center justify-between border-t border-border bg-surface px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => document.getElementById('attachment-input')?.click()}
-              >
-                <Paperclip className="w-4 h-4" />
-                <input
-                  id="attachment-input"
-                  type="file"
-                  multiple
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSaveDraft}
-                className="font-mono text-xs h-8"
-              >
-                Save draft
-              </Button>
-              {lastSaved && (
-                <span className="font-mono text-[10px] text-muted-foreground">
-                  Saved {lastSaved.toLocaleTimeString()}
-                </span>
-              )}
-            </div>
+          {/* Send button — always visible */}
+          <div className="flex items-center justify-end px-4 py-3 border-t border-border bg-surface">
             <Button
               onClick={handleSend}
               disabled={isSending}

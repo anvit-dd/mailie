@@ -58,18 +58,18 @@ export function getOrCreateAccount(email: string, name: string | null, accessTok
     if (picture !== undefined) {
       db.prepare(`UPDATE accounts SET name = ?, picture = ? WHERE id = ?`).run(name, picture, existing.id)
     }
-    return { ...existing, name: name ?? existing.name, picture: picture ?? existing.picture }
+    return { ...existing, name: name ?? existing.name, picture: picture ?? existing.picture, provider: existing.provider }
   }
 
   const id = randomBytes(16).toString('hex')
   const createdAt = Date.now()
 
-  db.prepare(`INSERT INTO accounts (id, email, name, picture, created_at) VALUES (?, ?, ?, ?, ?)`).run(id, email, name, picture ?? null, createdAt)
+  db.prepare(`INSERT INTO accounts (id, email, name, picture, provider, created_at) VALUES (?, ?, ?, ?, 'gmail', ?)`).run(id, email, name, picture ?? null, createdAt)
 
   db.prepare(`
     INSERT INTO gmail_tokens (account_id, access_token, refresh_token, expires_at, updated_at)
     VALUES (?, ?, ?, ?, ?)
   `).run(id, accessToken, refreshToken, expiresAt, Date.now())
 
-  return { id, email, name: name ?? null, picture: picture ?? null, created_at: createdAt }
+  return { id, email, name: name ?? null, picture: picture ?? null, provider: 'gmail' as const, created_at: createdAt }
 }

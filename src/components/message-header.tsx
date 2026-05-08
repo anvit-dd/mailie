@@ -13,6 +13,8 @@ import {
   Paperclip,
   ChevronDown,
   Download,
+  Archive,
+  Mail,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -23,7 +25,7 @@ interface MessageHeaderProps {
 }
 
 export function MessageHeader({ onReply, onForward, hideSubject }: MessageHeaderProps) {
-  const { selectedEmail, toggleStar } = useEmail()
+  const { selectedEmail, toggleStar, trashEmail, archiveEmail, markAsRead } = useEmail()
   const [showAllHeaders, setShowAllHeaders] = useState(false)
 
   if (!selectedEmail) return null
@@ -127,8 +129,29 @@ export function MessageHeader({ onReply, onForward, hideSubject }: MessageHeader
           variant="ghost"
           size="icon"
           className="h-7 w-7 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          onClick={() => selectedEmail && trashEmail(selectedEmail.id)}
         >
           <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+
+        {/* Archive */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          onClick={() => selectedEmail && archiveEmail(selectedEmail.id)}
+        >
+          <Archive className="w-3.5 h-3.5" />
+        </Button>
+
+        {/* Mark as Read / Unread */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          onClick={() => selectedEmail && markAsRead(selectedEmail.id, !selectedEmail.isRead)}
+        >
+          <Mail className="w-3.5 h-3.5" />
         </Button>
 
         {/* Star */}

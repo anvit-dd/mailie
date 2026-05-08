@@ -194,14 +194,25 @@
     @apply border-border outline-ring/50;
   }
 
+  html,
   body {
-    @apply bg-background text-foreground;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
   }
 
-  /* Zed: 13px base, all hierarchy via weight + opacity */
+  body {
+    @apply bg-background text-foreground;
+    width: 100%;
+    height: 100%;
+  }
+
   html {
     font-size: 13px;
     @apply font-mono antialiased;
+    width: 100%;
+    height: 100%;
   }
 }
 
@@ -283,6 +294,24 @@
    TipTap v3 Image.configure({ resize }) creates:
    [data-resize-container] > [data-resize-wrapper] > img + [data-resize-handle]
    ============================================ */
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.ProseMirror ul {
+  list-style-type: disc;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+}
+
+.ProseMirror li {
+  margin: 0.25em 0;
+}
 
 .ProseMirror [data-resize-container] {
   align-items: flex-start !important;

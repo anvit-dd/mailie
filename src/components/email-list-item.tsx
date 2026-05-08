@@ -4,6 +4,7 @@ import { Email } from '@/types/email'
 import { Paperclip, Star, Trash2 } from 'lucide-react'
 import { useEmail } from '@/contexts/email-context'
 import Image from 'next/image'
+import { Checkbox } from '@/components/ui/checkbox'
 
 function formatRelativeDate(date: Date): string {
   const now = new Date()
@@ -29,11 +30,14 @@ interface EmailListItemProps {
   email: Email
   isSelected: boolean
   onClick: () => void
+  selectedIds: Set<string>
+  toggleSelected: (id: string) => void
 }
 
-export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps) {
+export function EmailListItem({ email, isSelected, onClick, selectedIds, toggleSelected }: EmailListItemProps) {
   const { avatarMap, toggleStar, trashEmail } = useEmail()
   const avatarUrl = avatarMap[email.from.email]
+  const isChecked = selectedIds.has(email.id)
 
   return (
     <button
@@ -45,11 +49,20 @@ export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps
           ? 'bg-[var(--surface-elevated)] border-l-2 border-l-[var(--accent)]'
           : 'border-l-2 border-l-transparent'
         }
+        ${isChecked ? 'bg-[var(--surface-deep)]' : ''}
       `}
     >
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-center gap-2.5">
+        {/* Bulk selection checkbox */}
+        <div className="shrink-0" onClick={(e) => { e.stopPropagation(); toggleSelected(email.id) }}>
+          <Checkbox
+            checked={isChecked}
+            onCheckedChange={() => toggleSelected(email.id)}
+            className="cursor-pointer"
+          />
+        </div>
         {/* Sender avatar */}
-        <div className="mt-0.5 shrink-0">
+        <div className="relative shrink-0">
           {avatarUrl ? (
             <Image
               src={avatarUrl}
@@ -75,6 +88,10 @@ export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps
                 {(email.from.name || email.from.email).charAt(0).toUpperCase()}
               </span>
             </div>
+          )}
+          {/* Unread indicator dot — left-side accent dot */}
+          {!email.isRead && (
+            <span className="absolute top-0.5 left-0.5 w-1.5 h-1.5 rounded-full bg-[var(--accent)] ring-1 ring-[var(--background)]" />
           )}
         </div>
 

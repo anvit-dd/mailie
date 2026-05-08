@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PopoverRoot, PopoverTrigger, PopoverPortal, PopoverPositioner, PopoverContent } from '@/components/ui/popover'
 import { toast } from 'sonner'
+import { useState, useEffect } from 'react'
 import {
   Inbox,
   ShieldAlert,
@@ -18,6 +19,7 @@ import {
   Settings,
   LogOut,
   Star,
+  Tag,
 } from 'lucide-react'
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -34,9 +36,35 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onSettingsOpen }: SidebarProps) {
-  const { account, logout } = useAuth()
+  const { account, logout, provider } = useAuth()
   const { folders, currentFolder, setCurrentFolder } = useEmail()
   const { handleCompose } = useCompose()
+  const [gmailLabels, setGmailLabels] = useState<Array<{ id: string; name: string; unreadCount: number }>>([])
+
+  useEffect(() => {
+    if (provider !== 'gmail') return
+
+    async function fetchLabels() {
+      try {
+        const res = await fetch('/api/gmail/labels', { credentials: 'include' })
+        if (!res.ok) return
+        const data = await res.json() as { labels: Array<{ id: string; name: string; messagesUnreadCount?: number }> }
+        // Filter to system labels that aren't already in the folders list
+        const systemLabels = data.labels.filter((l) =>
+          !['INBOX', 'SENT', 'DRAFT', 'TRASH', 'SPAM', 'STARRED', 'ARCHIVE', 'IMPORTANT'].includes(l.id)
+        )
+        setGmailLabels(systemLabels.map((l) => ({
+          id: l.id,
+          name: l.name,
+          unreadCount: l.messagesUnreadCount ?? 0,
+        })))
+      } catch {
+        // non-fatal
+      }
+    }
+
+    void fetchLabels()
+  }, [provider])
 
   const handleLogout = async () => {
     try {
@@ -111,6 +139,62 @@ export function Sidebar({ onSettingsOpen }: SidebarProps) {
             )
           })}
         </nav>
+
+        {/* Gmail Labels — shown below folders for Gmail accounts */}
+        {provider === 'gmail' && gmailLabels.length > 0 && (
+          <div className="pb-2">
+            <div className="px-4 py-2">
+              <div className="flex items-center gap-1.5">
+                <Tag className="w-3 h-3 text-[var(--muted-foreground)]" />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted-foreground)]">
+                  Labels
+                </span>
+              </div>
+            </div>
+            <nav className="flex flex-col gap-0.5 px-2 pb-2">
+              {gmailLabels.map((label) => {
+                const isActive = currentFolder.id === label.id
+                const activeClass = isActive
+                  ? 'bg-[var(--surface-elevated)] text-[var(--sidebar-primary)]'
+                  : 'text-[var(--muted-foreground)] hover:bg-[var(--surface-elevated)] hover:text-[var(--sidebar-foreground)]'
+                return (
+                  <button
+                    key={label.id}
+                    onClick={() => {
+                      startTransition(() => {
+                        setCurrentFolder({ id: label.id, name: label.name, icon: 'tag', unreadCount: label.unreadCount })
+                      })
+                    }}
+                    className={'w-full flex items-center justify-between px-2 py-1.5 text-[12px] rounded-sm transition-colors font-mono ' + activeClass}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Tag className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{label.name}</span>
+                    </div>
+                    {label.unreadCount > 0 && (
+                      <Badge
+                        variant={isActive ? 'default' : 'secondary'}
+                        className="font-mono text-[10px] h-4 min-w-4 px-1 shrink-0"
+                      >
+                        {label.unreadCount}
+                      </Badge>
+                    )}
+                  </button>
+                )
+              })}
+            </nav>
+          </div>
+        )}
+
+        {provider === 'smtp_imap' && (
+          <div className="pb-2">
+            <div className="px-4 py-1">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted-foreground)]">
+                Folders
+              </span>
+            </div>
+          </div>
+        )}
       </ScrollArea>
 
       {/* Account */}

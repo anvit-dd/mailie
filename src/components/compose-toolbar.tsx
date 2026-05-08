@@ -6,8 +6,8 @@ import {
   Bold, Italic, Underline, Strikethrough, Code,
   List, ListOrdered, Quote, Minus, Undo, Redo,
   Image, AlignLeft, AlignCenter, AlignRight,
-  ChevronDown, Palette, Highlighter, ArrowLeft, Crop,
-  Shrink, Expand
+  ChevronDown, Palette, Highlighter, Link, ArrowLeft, Crop,
+  Shrink, Expand, MoreHorizontal
 } from 'lucide-react'
 import ReactCrop, { type Crop as CropType, centerCrop, makeAspectCrop } from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
@@ -24,6 +24,7 @@ import {
 
 interface ComposeToolbarProps {
   editor: Editor
+  onImageAttach?: () => void
 }
 
 function toNumber(value: unknown): number | undefined {
@@ -168,6 +169,7 @@ function TbBtn({
       variant="ghost"
       size="icon"
       onClick={onClick}
+      onMouseDown={(e) => e.preventDefault()}
       disabled={disabled}
       title={title}
       type="button"
@@ -181,7 +183,11 @@ function TbBtn({
   )
 }
 
-// Dropdown select button
+// Compact toolbar — only common actions visible, rest behind dropdowns
+function TbDivider() {
+  return <div className="w-px h-4 bg-border mx-0.5 shrink-0" />
+}
+
 function TbSelect({
   value,
   onChange,
@@ -207,6 +213,41 @@ function TbSelect({
         </option>
       ))}
     </select>
+  )
+}
+
+function ToolbarDropdown({
+  label,
+  icon,
+  children,
+}: {
+  label?: string
+  icon?: React.ReactNode
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <PopoverRoot open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            type="button"
+            className="h-7 w-7 p-0 shrink-0 text-foreground"
+          >
+            {icon ?? label}
+            {label && !icon && <ChevronDown className="w-3 h-3 text-muted-foreground ml-0.5" />}
+          </Button>
+        }
+      />
+      <PopoverPortal>
+        <PopoverPositioner side="top" align="start" sideOffset={4}>
+          <PopoverContent className="p-1 bg-background border-border rounded-sm shadow-xl">
+            {children}
+          </PopoverContent>
+        </PopoverPositioner>
+      </PopoverPortal>
+    </PopoverRoot>
   )
 }
 
@@ -290,7 +331,7 @@ function removeColor(mark: string, editor: Editor) {
   editor.chain().focus().extendMarkRange(mark).unsetMark(mark).run()
 }
 
-export function ComposeToolbar({ editor }: ComposeToolbarProps) {
+export function ComposeToolbar({ editor, onImageAttach }: ComposeToolbarProps) {
   const [showLinkInput, setShowLinkInput] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -373,8 +414,8 @@ export function ComposeToolbar({ editor }: ComposeToolbarProps) {
         onChange={handleImageFileChange}
       />
 
-      <div className="flex flex-col gap-1.5 mb-3 pb-2 border-b border-border">
-        {/* Row 1 — history, inline formatting, font controls */}
+      <div className="flex flex-col gap-1.5">
+        {/* Row 1 — compact: common formatting + essential insert */}
         <div className="flex items-center gap-0.5 flex-wrap">
           {/* History */}
           <TbBtn
@@ -392,9 +433,9 @@ export function ComposeToolbar({ editor }: ComposeToolbarProps) {
             <Redo className="w-3.5 h-3.5" />
           </TbBtn>
 
-          <Sep />
+          <TbDivider />
 
-          {/* Inline format group */}
+          {/* Inline format group — always visible */}
           <TbBtn
             onClick={() => editor.chain().focus().toggleBold().run()}
             isActive={editor.isActive('bold')}
@@ -423,149 +464,8 @@ export function ComposeToolbar({ editor }: ComposeToolbarProps) {
           >
             <Strikethrough className="w-3.5 h-3.5" />
           </TbBtn>
-          <TbBtn
-            onClick={() => editor.chain().focus().toggleCode().run()}
-            isActive={editor.isActive('code')}
-            title="Inline code"
-          >
-            <Code className="w-3.5 h-3.5" />
-          </TbBtn>
 
-          <Sep />
-
-          {/* Heading + font family + font size in one cluster */}
-          {/* Heading selector */}
-          <PopoverRoot>
-            <PopoverTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  title="Heading"
-                  type="button"
-                  className={clsx(
-                    'h-7 px-2 w-auto gap-1 shrink-0 font-mono text-[11px]',
-                    isInHeading ? 'text-accent bg-accent/10' : 'text-foreground'
-                  )}
-                >
-                  {headingLabel}
-                  <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                </Button>
-              }
-            />
-            <PopoverPortal>
-              <PopoverPositioner side="bottom" align="start" sideOffset={4}>
-                <PopoverContent className="p-1 bg-background border-border rounded-sm w-32">
-                  {[
-                    { label: 'Paragraph', level: 0 as const },
-                    { label: 'Heading 1', level: 1 as const },
-                    { label: 'Heading 2', level: 2 as const },
-                    { label: 'Heading 3', level: 3 as const },
-                  ].map(({ label, level }) => (
-                    <button
-                      key={level}
-                      onClick={() => handleHeading(level)}
-                      className={clsx(
-                        'w-full text-left px-2 py-1 font-mono text-xs hover:bg-surface-elevated rounded-sm transition-colors',
-                        (level === 0 && !isInHeading) || currentHeadingLevel === level
-                          ? 'text-accent'
-                          : 'text-foreground'
-                      )}
-                      type="button"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </PopoverContent>
-              </PopoverPositioner>
-            </PopoverPortal>
-          </PopoverRoot>
-
-          {/* Font family */}
-          <TbSelect
-            value={currentFontFamily ?? ''}
-            onChange={handleFontFamilyChange}
-            options={FONT_FAMILIES.map((f) => ({
-              label: f.label,
-              value: f.value,
-            }))}
-            title="Font family"
-          />
-
-          {/* Font size */}
-          <TbSelect
-            value={currentFontSize ?? ''}
-            onChange={handleFontSizeChange}
-            options={FONT_SIZES.map((f) => ({
-              label: f.label,
-              value: f.value,
-            }))}
-            title="Font size"
-          />
-
-          <Sep />
-
-          {/* Text color */}
-          <ColorPicker
-            colors={TEXT_COLORS}
-            currentColor={currentTextColor}
-            onSelect={handleTextColor}
-            title="Text color"
-            icon={<Palette className="w-3.5 h-3.5" />}
-          />
-
-          {/* Highlight */}
-          <ColorPicker
-            colors={HIGHLIGHT_COLORS}
-            currentColor={currentHighlightColor}
-            onSelect={handleHighlight}
-            title="Highlight"
-            icon={<Highlighter className="w-3.5 h-3.5" />}
-          />
-
-          <Sep />
-
-          {/* Text alignment */}
-          <TbBtn
-            onClick={() => activeImage ? setImageAlign(editor, 'left') : editor.chain().focus().setTextAlign('left').run()}
-            isActive={currentTextAlign === 'left'}
-            title="Align left"
-          >
-            <AlignLeft className="w-3.5 h-3.5" />
-          </TbBtn>
-          <TbBtn
-            onClick={() => activeImage ? setImageAlign(editor, 'center') : editor.chain().focus().setTextAlign('center').run()}
-            isActive={currentTextAlign === 'center'}
-            title="Align center"
-          >
-            <AlignCenter className="w-3.5 h-3.5" />
-          </TbBtn>
-          <TbBtn
-            onClick={() => activeImage ? setImageAlign(editor, 'right') : editor.chain().focus().setTextAlign('right').run()}
-            isActive={currentTextAlign === 'right'}
-            title="Align right"
-          >
-            <AlignRight className="w-3.5 h-3.5" />
-          </TbBtn>
-        </div>
-
-        {/* Row 2 — block elements, lists, insert */}
-        <div className="flex items-center gap-0.5 flex-wrap">
-          {/* Block elements */}
-          <TbBtn
-            onClick={() => editor.chain().focus().toggleBlockquote().run()}
-            isActive={editor.isActive('blockquote')}
-            title="Quote"
-          >
-            <Quote className="w-3.5 h-3.5" />
-          </TbBtn>
-          <TbBtn
-            onClick={() => editor.chain().focus().setHorizontalRule().run()}
-            title="Horizontal rule"
-          >
-            <Minus className="w-3.5 h-3.5" />
-          </TbBtn>
-
-          <Sep />
+          <TbDivider />
 
           {/* Lists */}
           <TbBtn
@@ -583,9 +483,9 @@ export function ComposeToolbar({ editor }: ComposeToolbarProps) {
             <ListOrdered className="w-3.5 h-3.5" />
           </TbBtn>
 
-          <Sep />
+          <TbDivider />
 
-          {/* Link + image insert */}
+          {/* Link + image insert — essential insert actions */}
           <TbBtn
             onClick={() => {
               if (editor.isActive('link')) {
@@ -597,38 +497,173 @@ export function ComposeToolbar({ editor }: ComposeToolbarProps) {
             isActive={editor.isActive('link')}
             title={editor.isActive('link') ? 'Remove link' : 'Insert link'}
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <Link className="w-3.5 h-3.5" />
           </TbBtn>
           <TbBtn
-            onClick={handleImageAttach}
+            onClick={onImageAttach ?? handleImageAttach}
             title="Insert image"
           >
             <Image className="w-3.5 h-3.5" />
           </TbBtn>
-          <TbBtn
-            onClick={() => {
-              if (activeImage?.src) setCropModalSrc(activeImage.src)
-            }}
-            isActive={false}
-            disabled={!activeImage?.src}
-            title="Crop image"
-          >
-            <Crop className="w-3.5 h-3.5" />
-          </TbBtn>
-          <TbBtn
-            onClick={() => resizeSelectedImage(editor, 0.85)}
-            disabled={!activeImage}
-            title="Shrink image"
-          >
-            <Shrink className="w-3.5 h-3.5" />
-          </TbBtn>
-          <TbBtn
-            onClick={() => resizeSelectedImage(editor, 1.15)}
-            disabled={!activeImage}
-            title="Expand image"
-          >
-            <Expand className="w-3.5 h-3.5" />
-          </TbBtn>
+
+          <TbDivider />
+
+          {/* More dropdown — heading, font, size, color, highlight, align, quote, hr, code, image controls */}
+          <ToolbarDropdown icon={<MoreHorizontal className="w-4 h-4" />}>
+            {/* Row A: heading + font controls */}
+            <div className="flex items-center gap-1 p-1">
+              {/* Heading selector */}
+              <PopoverRoot>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      title="Heading"
+                      type="button"
+                      className={clsx(
+                        'h-7 px-2 w-auto gap-1 shrink-0 font-mono text-[11px]',
+                        isInHeading ? 'text-accent bg-accent/10' : 'text-foreground'
+                      )}
+                    >
+                      {headingLabel}
+                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                    </Button>
+                  }
+                />
+                <PopoverPortal>
+                  <PopoverPositioner side="right" align="start" sideOffset={4}>
+                    <PopoverContent className="p-1 bg-background border-border rounded-sm w-32">
+                      {[
+                        { label: 'Paragraph', level: 0 as const },
+                        { label: 'Heading 1', level: 1 as const },
+                        { label: 'Heading 2', level: 2 as const },
+                        { label: 'Heading 3', level: 3 as const },
+                      ].map(({ label, level }) => (
+                        <button
+                          key={level}
+                          onClick={() => handleHeading(level)}
+                          className={clsx(
+                            'w-full text-left px-2 py-1 font-mono text-xs hover:bg-surface-elevated rounded-sm transition-colors',
+                            (level === 0 && !isInHeading) || currentHeadingLevel === level
+                              ? 'text-accent'
+                              : 'text-foreground'
+                          )}
+                          type="button"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </PopoverPositioner>
+                </PopoverPortal>
+              </PopoverRoot>
+
+              {/* Font family */}
+              <TbSelect
+                value={currentFontFamily ?? ''}
+                onChange={handleFontFamilyChange}
+                options={FONT_FAMILIES.map((f) => ({ label: f.label, value: f.value }))}
+                title="Font family"
+              />
+
+              {/* Font size */}
+              <TbSelect
+                value={currentFontSize ?? ''}
+                onChange={handleFontSizeChange}
+                options={FONT_SIZES.map((f) => ({ label: f.label, value: f.value }))}
+                title="Font size"
+              />
+            </div>
+
+            {/* Row B: text color + highlight */}
+            <div className="flex items-center gap-1 p-1 border-t border-border">
+              <ColorPicker
+                colors={TEXT_COLORS}
+                currentColor={currentTextColor}
+                onSelect={handleTextColor}
+                title="Text color"
+                icon={<Palette className="w-3.5 h-3.5" />}
+              />
+              <ColorPicker
+                colors={HIGHLIGHT_COLORS}
+                currentColor={currentHighlightColor}
+                onSelect={handleHighlight}
+                title="Highlight"
+                icon={<Highlighter className="w-3.5 h-3.5" />}
+              />
+            </div>
+
+            {/* Row C: align + block elements */}
+            <div className="flex items-center gap-1 p-1 border-t border-border">
+              <TbBtn
+                onClick={() => activeImage ? setImageAlign(editor, 'left') : editor.chain().focus().setTextAlign('left').run()}
+                isActive={currentTextAlign === 'left'}
+                title="Align left"
+              >
+                <AlignLeft className="w-3.5 h-3.5" />
+              </TbBtn>
+              <TbBtn
+                onClick={() => activeImage ? setImageAlign(editor, 'center') : editor.chain().focus().setTextAlign('center').run()}
+                isActive={currentTextAlign === 'center'}
+                title="Align center"
+              >
+                <AlignCenter className="w-3.5 h-3.5" />
+              </TbBtn>
+              <TbBtn
+                onClick={() => activeImage ? setImageAlign(editor, 'right') : editor.chain().focus().setTextAlign('right').run()}
+                isActive={currentTextAlign === 'right'}
+                title="Align right"
+              >
+                <AlignRight className="w-3.5 h-3.5" />
+              </TbBtn>
+              <TbDivider />
+              <TbBtn
+                onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                isActive={editor.isActive('blockquote')}
+                title="Quote"
+              >
+                <Quote className="w-3.5 h-3.5" />
+              </TbBtn>
+              <TbBtn
+                onClick={() => editor.chain().focus().setHorizontalRule().run()}
+                title="Horizontal rule"
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </TbBtn>
+              <TbBtn
+                onClick={() => editor.chain().focus().toggleCode().run()}
+                isActive={editor.isActive('code')}
+                title="Inline code"
+              >
+                <Code className="w-3.5 h-3.5" />
+              </TbBtn>
+            </div>
+
+            {/* Row D: image controls — only shown when image is selected */}
+            {activeImage && (
+              <div className="flex items-center gap-1 p-1 border-t border-border">
+                <TbBtn
+                  onClick={() => { if (activeImage?.src) setCropModalSrc(activeImage.src) }}
+                  disabled={!activeImage?.src}
+                  title="Crop image"
+                >
+                  <Crop className="w-3.5 h-3.5" />
+                </TbBtn>
+                <TbBtn
+                  onClick={() => resizeSelectedImage(editor, 0.85)}
+                  title="Shrink image"
+                >
+                  <Shrink className="w-3.5 h-3.5" />
+                </TbBtn>
+                <TbBtn
+                  onClick={() => resizeSelectedImage(editor, 1.15)}
+                  title="Expand image"
+                >
+                  <Expand className="w-3.5 h-3.5" />
+                </TbBtn>
+              </div>
+            )}
+          </ToolbarDropdown>
 
           {/* Inline link input */}
           {showLinkInput && (

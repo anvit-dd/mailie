@@ -8,7 +8,10 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error')
   const appUrl = getAppUrl()
 
+  console.log('[OAuth callback] URL:', request.url, '| code:', code, '| error:', error)
+
   if (error || !code) {
+    console.log('[OAuth callback] Missing code or error present — error:', error, 'code:', code)
     return NextResponse.redirect(`${appUrl}/?error=${error || 'no_code'}`)
   }
 
@@ -27,6 +30,8 @@ export async function GET(request: NextRequest) {
     })
 
     if (!tokenResponse.ok) {
+      const body = await tokenResponse.text()
+      console.error('[OAuth] Token exchange failed — status:', tokenResponse.status, '| body:', body)
       throw new Error('Token exchange failed')
     }
 

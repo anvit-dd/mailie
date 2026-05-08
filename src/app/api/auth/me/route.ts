@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
       id: account.id,
       email: account.email,
       name: account.name,
+      provider: account.provider,
     },
   })
 }

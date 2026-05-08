@@ -21,6 +21,7 @@ db.exec(`
     email TEXT UNIQUE NOT NULL,
     name TEXT,
     picture TEXT,
+    provider TEXT DEFAULT 'gmail' NOT NULL,
     created_at INTEGER NOT NULL
   );
 
@@ -29,6 +30,24 @@ db.exec(`
     access_token TEXT NOT NULL,
     refresh_token TEXT,
     expires_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS mail_credentials (
+    account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    display_name TEXT,
+    smtp_host TEXT NOT NULL,
+    smtp_port INTEGER NOT NULL,
+    smtp_secure INTEGER NOT NULL,
+    smtp_username TEXT NOT NULL,
+    smtp_password_encrypted TEXT NOT NULL,
+    imap_host TEXT NOT NULL,
+    imap_port INTEGER NOT NULL,
+    imap_secure INTEGER NOT NULL,
+    imap_username TEXT NOT NULL,
+    imap_password_encrypted TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
 
@@ -47,11 +66,21 @@ try {
   // Column already exists — ignore
 }
 
+// Migrate old schema: add provider column if missing
+try {
+  db.exec(`ALTER TABLE accounts ADD COLUMN provider TEXT DEFAULT 'gmail'`)
+} catch {
+  // Column already exists — ignore
+}
+
+export type AccountProvider = 'gmail' | 'smtp_imap'
+
 export interface Account {
   id: string
   email: string
   name: string | null
   picture?: string | null
+  provider: AccountProvider
   created_at: number
 }
 

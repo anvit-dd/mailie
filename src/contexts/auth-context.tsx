@@ -6,12 +6,14 @@ interface Account {
   id: string
   email: string
   name: string | null
+  provider: 'gmail' | 'smtp_imap'
 }
 
 interface AuthContextType {
   account: Account | null
   isLoading: boolean
   isAuthenticated: boolean
+  provider: 'gmail' | 'smtp_imap' | null
   login: () => void
   logout: () => Promise<void>
   refreshToken: () => Promise<string | null>
@@ -41,6 +43,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     fetchUser()
   }, [])
+
+  // Derive provider from account
+  const provider = account?.provider ?? null
 
   const login = useCallback(() => {
     // Redirect to server-side OAuth initiation
@@ -73,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         account,
         isLoading,
         isAuthenticated: !!account,
+        provider,
         login,
         logout,
         refreshToken,
