@@ -8,7 +8,6 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { useTheme } from '@/contexts/theme-context'
-import { Button } from '@/components/ui/button'
 import { Sun, Moon, Wifi, Shield, Bell, Info } from 'lucide-react'
 
 interface SettingsDialogProps {

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/contexts/auth-context'
-import { useEmail } from '@/contexts/email-context'
 import { useCompose } from '@/contexts/compose-context'
 import { Sidebar } from '@/components/sidebar'
 import { MobileNav } from '@/components/mobile-nav'
@@ -20,7 +19,6 @@ const MAX_LIST_WIDTH = 600
 
 export default function Home() {
   const { isAuthenticated, isLoading, login } = useAuth()
-  const { selectedEmail } = useEmail()
   const { handleReply, handleForward, handleCompose } = useCompose()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [listWidth, setListWidth] = useState(DEFAULT_LIST_WIDTH)
@@ -74,7 +72,7 @@ export default function Home() {
           <div className="mb-8">
             {/* Zed-style logo mark */}
             <div className="inline-flex items-center justify-center w-14 h-14 border border-[var(--border)] mb-4">
-              <span className="font-mono text-2xl font-bold text-[#8B5CF6]">m</span>
+              <span className="font-mono text-2xl font-bold text-[var(--brand)]">m</span>
             </div>
             <h1 className="text-4xl font-mono font-bold mb-2 tracking-tight text-[var(--foreground)]">
               mailie<span className="text-[var(--muted-foreground)]">_</span>
@@ -106,7 +104,7 @@ export default function Home() {
             Connect Gmail
           </Button>
 
-          <div className="mt-6 space-y-1">
+          <div className="mt-6 flex flex-col gap-1">
             <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
               OAuth2 · no password stored · tokens encrypted
             </p>

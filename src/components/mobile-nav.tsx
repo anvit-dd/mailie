@@ -79,7 +79,7 @@ export function MobileNav({ onCompose, onSettingsOpen }: MobileNavProps) {
           <div className="flex items-center gap-2">
             {/* Zed purple logo mark */}
             <div className="w-7 h-7 flex items-center justify-center">
-              <span className="font-mono text-base font-bold text-[#8B5CF6] select-none">m</span>
+              <span className="font-mono text-base font-bold text-[var(--brand)] select-none">m</span>
             </div>
             <span className="font-mono text-sm font-bold text-[var(--sidebar-foreground)]">
               mailie
@@ -108,7 +108,7 @@ export function MobileNav({ onCompose, onSettingsOpen }: MobileNavProps) {
         </div>
 
         {/* Folders */}
-        <nav className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
           {folders.map((folder) => {
             const Icon = iconMap[folder.icon] || Inbox
             const isActive = currentFolder.id === folder.id

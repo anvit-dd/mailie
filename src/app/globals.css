@@ -77,6 +77,7 @@
   --border:         #d4d4d8;
   --input:          #d4d4d8;
   --ring:           #18181b;
+  --brand:          #8B5CF6;
 
   /* Radius — Zed uses near-zero radius */
   --radius:         0.125rem;
@@ -131,7 +132,8 @@
   /* Borders — warm grays, never harsh */
   --border:          #464B57;
   --input:           #2F343E;
-  --ring:            #74ADE8;
+  --ring:            #47679E;
+  --brand:           #8B5CF6;
 
   /* Radius — Zed uses near-zero radius */
   --radius:          0.125rem;
@@ -163,6 +165,11 @@
   --editor-bg: #f4f4f5;
   /* Toolbar background */
   --toolbar-bg: #f4f4f5;
+  --border-focused: #18181b;
+  --text-accent: #18181b;
+  --text-placeholder: #71717a;
+  --resize-handle: #18181b;
+  --resize-handle-hover: #71717a;
 }
 
 /* Dark mode — Zed One Dark */
@@ -171,6 +178,11 @@
   --surface-deep: #3B414D;
   --editor-bg: #282C33;
   --toolbar-bg: #282C33;
+  --border-focused: #47679E;
+  --text-accent: #74ADE8;
+  --text-placeholder: #878A98;
+  --resize-handle: #74ADE8;
+  --resize-handle-hover: #A9AFBC;
 }
 
 /* ============================================
@@ -232,7 +244,7 @@
    ============================================ */
 
 .dark *:focus-visible {
-  outline-color: #47679E;
+  outline-color: var(--border-focused);
   outline-offset: 1px;
 }
 
@@ -250,20 +262,20 @@
 }
 
 .dark .ReactCrop__crop-selection {
-  border-color: #74ADE8;
-  box-shadow: 0 0 0 1px #74ADE8;
+  border-color: var(--text-accent);
+  box-shadow: 0 0 0 1px var(--text-accent);
 }
 
 .dark .ReactCrop__drag-handle {
-  background-color: #74ADE8;
+  background-color: var(--text-accent);
 }
 
 .dark .ReactCrop__drag-handle::after {
-  border-color: #74ADE8;
+  border-color: var(--text-accent);
 }
 
 .dark .ReactCrop--disabled .ReactCrop__crop-selection {
-  border-color: #A9AFBC;
+  border-color: var(--muted-foreground);
 }
 
 /* ============================================
@@ -313,7 +325,7 @@
 
 .ProseMirror .ProseMirror-selectednode[data-resize-container] [data-resize-wrapper] img,
 .ProseMirror [data-resize-container][data-resize-state='true'] [data-resize-wrapper] img {
-  outline: 1px solid #74ADE8;
+  outline: 1px solid var(--text-accent);
 }
 
 /* Resize handles — visible + large enough to grab in the small compose panel. */
@@ -321,7 +333,7 @@
   position: absolute !important;
   width: 12px;
   height: 12px;
-  background: #74ADE8 !important;
+  background: var(--resize-handle) !important;
   border: 1.5px solid rgba(255, 255, 255, 0.9);
   border-radius: 2px;
   z-index: 30;
@@ -359,5 +371,5 @@
 }
 
 .ProseMirror [data-resize-handle]:hover {
-  background: #a9afbc !important;
+  background: var(--resize-handle-hover) !important;
 }

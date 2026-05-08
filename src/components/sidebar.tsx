@@ -4,7 +4,6 @@ import { startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useEmail } from '@/contexts/email-context'
 import { useCompose } from '@/contexts/compose-context'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PopoverRoot, PopoverTrigger, PopoverPortal, PopoverPositioner, PopoverContent } from '@/components/ui/popover'
@@ -54,7 +53,7 @@ export function Sidebar({ onSettingsOpen }: SidebarProps) {
       {/* Logo row — no internal bottom border; single top border only */}
       <div className="flex items-center gap-2 px-3 py-3">
         <div className="w-7 h-7 rounded-sm bg-[var(--surface-deep)] flex items-center justify-center shrink-0">
-          <span className="font-mono text-sm font-bold text-[#8B5CF6] select-none">m</span>
+          <span className="font-mono text-sm font-bold text-[var(--brand)] select-none">m</span>
         </div>
         <div className="flex-1" />
       </div>
@@ -74,7 +73,7 @@ export function Sidebar({ onSettingsOpen }: SidebarProps) {
 
       {/* Folders */}
       <ScrollArea className="flex-1 py-2">
-        <nav className="space-y-0.5 px-2">
+        <nav className="flex flex-col gap-0.5 px-2">
           {folders.map((folder) => {
             const Icon = iconMap[folder.icon] || Inbox
             const isActive = currentFolder.id === folder.id
