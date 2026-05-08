@@ -3,15 +3,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useEmail } from '@/contexts/email-context'
+import { useCompose } from '@/contexts/compose-context'
 import { Sidebar } from '@/components/sidebar'
 import { MobileNav } from '@/components/mobile-nav'
 import { EmailList } from '@/components/email-list'
 import { MessageView } from '@/components/message-view'
 import { MobileEmailView } from '@/components/mobile-email-view'
-import { Compose } from '@/components/compose'
 import { SettingsDialog } from '@/components/settings-dialog'
+import { ComposePanel } from '@/components/compose-panel'
 import { Button } from '@/components/ui/button'
-import { Loader2 } from 'lucide-react'
+import { Loader2, PenSquare } from 'lucide-react'
 
 const DEFAULT_LIST_WIDTH = 320
 const MIN_LIST_WIDTH = 200
@@ -20,10 +21,8 @@ const MAX_LIST_WIDTH = 600
 export default function Home() {
   const { isAuthenticated, isLoading, login } = useAuth()
   const { selectedEmail } = useEmail()
-  const [isComposeOpen, setIsComposeOpen] = useState(false)
+  const { handleReply, handleForward, handleCompose } = useCompose()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [composeNonce, setComposeNonce] = useState(0)
-  const [replyTo, setReplyTo] = useState<ComposeProps['replyTo'] | undefined>()
   const [listWidth, setListWidth] = useState(DEFAULT_LIST_WIDTH)
   const isDragging = useRef(false)
   const dragStartX = useRef(0)
@@ -59,83 +58,44 @@ export default function Home() {
     }
   }, [])
 
-  interface ComposeProps {
-    replyTo?: {
-      to: string
-      subject: string
-      body: string
-      inReplyTo?: string
-      references?: string
-      threadId?: string
-    }
-  }
-
-  const handleReply = useCallback(() => {
-    if (!selectedEmail) return
-    setReplyTo({
-      to: selectedEmail.from.email,
-      subject: selectedEmail.subject.startsWith('Re:')
-        ? selectedEmail.subject
-        : `Re: ${selectedEmail.subject}`,
-      body: '',
-      inReplyTo: selectedEmail.inReplyTo || selectedEmail.headers?.['Message-ID'] || undefined,
-      references: selectedEmail.references?.join(' ') || selectedEmail.headers?.['References'] || undefined,
-      threadId: selectedEmail.threadId,
-    })
-    setComposeNonce((value) => value + 1)
-    setIsComposeOpen(true)
-  }, [selectedEmail])
-
-  const handleForward = () => {
-    setReplyTo(undefined)
-    setComposeNonce((value) => value + 1)
-    setIsComposeOpen(true)
-  }
-
-  const handleCompose = () => {
-    setReplyTo(undefined)
-    setComposeNonce((value) => value + 1)
-    setIsComposeOpen(true)
-  }
-
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center h-screen bg-[var(--background)]">
+        <Loader2 className="w-5 h-5 animate-spin text-[var(--muted-foreground)]" />
       </div>
     )
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background">
+      <div className="flex items-center justify-center h-screen bg-[var(--background)]">
         <div className="text-center max-w-md px-6">
           {/* Logo */}
           <div className="mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 border-2 border-white rounded-sm mb-4">
-              <span className="text-3xl font-bold text-white">m</span>
+            {/* Zed-style logo mark */}
+            <div className="inline-flex items-center justify-center w-14 h-14 border border-[var(--border)] mb-4">
+              <span className="font-mono text-2xl font-bold text-[#8B5CF6]">m</span>
             </div>
-            <h1 className="text-5xl font-mono font-bold mb-2 tracking-tight">
-              <span className="text-white">mailie</span>
-              <span className="text-muted-foreground">_</span>
+            <h1 className="text-4xl font-mono font-bold mb-2 tracking-tight text-[var(--foreground)]">
+              mailie<span className="text-[var(--muted-foreground)]">_</span>
             </h1>
-            <p className="font-mono text-sm text-muted-foreground">
+            <p className="font-mono text-[13px] text-[var(--muted-foreground)]">
               Minimal email client
             </p>
           </div>
 
           {/* Divider */}
           <div className="flex items-center gap-3 mb-8">
-            <div className="flex-1 h-px bg-border" />
-            <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest">connect</span>
-            <div className="flex-1 h-px bg-border" />
+            <div className="flex-1 h-px bg-[var(--border)]" />
+            <span className="font-mono text-[11px] text-[var(--muted-foreground)] uppercase tracking-widest">connect</span>
+            <div className="flex-1 h-px bg-[var(--border)]" />
           </div>
 
           {/* Gmail connect */}
           <Button
             onClick={login}
             size="lg"
-            className="font-mono text-sm w-full bg-white text-black hover:bg-gray-200 h-11"
+            className="font-mono text-[13px] w-full bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 h-10"
           >
             <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -147,10 +107,10 @@ export default function Home() {
           </Button>
 
           <div className="mt-6 space-y-1">
-            <p className="font-mono text-[10px] text-muted-foreground">
+            <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
               OAuth2 · no password stored · tokens encrypted
             </p>
-            <p className="font-mono text-[10px] text-muted-foreground">
+            <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
               Sign in with your Google account to continue
             </p>
           </div>
@@ -163,7 +123,7 @@ export default function Home() {
     <div className="flex h-screen bg-background">
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
-        <Sidebar onCompose={handleCompose} onSettingsOpen={() => setIsSettingsOpen(true)} />
+        <Sidebar onSettingsOpen={() => setIsSettingsOpen(true)} />
       </div>
 
       {/* Desktop: email list + message view */}
@@ -172,7 +132,7 @@ export default function Home() {
           <EmailList />
         </div>
         <div
-          className="w-1 hover:bg-accent/50 cursor-col-resize transition-colors shrink-0"
+          className="w-1 hover:bg-[var(--accent)]/40 cursor-col-resize transition-colors shrink-0"
           onMouseDown={handleDragStart}
         />
         <div className="flex-1 min-w-0">
@@ -183,34 +143,35 @@ export default function Home() {
       {/* Mobile: full-screen email list OR full-screen email */}
       <div className="flex flex-col flex-1 min-w-0 md:hidden">
         {/* Mobile top bar */}
-        <div className="flex items-center gap-2 p-3 border-b border-border bg-surface shrink-0">
+        <div className="flex items-center gap-2 p-3 border-b border-[var(--border)] bg-[var(--card)] shrink-0">
           <MobileNav onCompose={handleCompose} onSettingsOpen={() => setIsSettingsOpen(true)} />
-          <span className="font-mono text-base font-bold tracking-tight">
-            <span className="text-accent">mailie</span>
-            <span className="text-muted-foreground">_</span>
+          <span className="font-mono text-sm font-bold tracking-tight text-[var(--foreground)]">
+            mailie<span className="text-[var(--muted-foreground)]">_</span>
           </span>
+          <div className="flex-1" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-[var(--foreground)] hover:bg-[var(--surface-elevated)]"
+            onClick={handleCompose}
+            aria-label="Compose new email"
+          >
+            <PenSquare className="w-4 h-4" />
+          </Button>
         </div>
 
         {/* Mobile email list + full-screen email */}
         <MobileEmailView onReply={handleReply} onForward={handleForward} />
       </div>
 
-      {/* Compose Dialog */}
-      <Compose
-        key={`${composeNonce}-${replyTo?.subject ?? 'new'}`}
-        isOpen={isComposeOpen}
-        onClose={() => {
-          setIsComposeOpen(false)
-          setReplyTo(undefined)
-        }}
-        replyTo={replyTo}
-      />
-
       {/* Settings Dialog */}
       <SettingsDialog
         open={isSettingsOpen}
         onOpenChange={setIsSettingsOpen}
       />
+
+      {/* Floating compose panel (portal'd to body) — persists across route changes */}
+      <ComposePanel />
     </div>
   )
 }

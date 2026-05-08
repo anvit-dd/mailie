@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/contexts/auth-context";
 import { EmailProvider } from "@/contexts/email-context";
 import { ThemeProvider } from "@/contexts/theme-context";
+import { ComposeProvider } from "@/contexts/compose-context";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -27,8 +28,10 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>
             <EmailProvider>
-              {children}
-              <Toaster />
+              <ComposeProvider>
+                {children}
+                <Toaster />
+              </ComposeProvider>
             </EmailProvider>
           </AuthProvider>
         </ThemeProvider>

@@ -14,11 +14,18 @@ import Underline from '@tiptap/extension-underline'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
+import { TextStyle, FontSize } from '@tiptap/extension-text-style'
+import { Color } from '@tiptap/extension-color'
+import { Highlight } from '@tiptap/extension-highlight'
+import { TextAlign } from '@tiptap/extension-text-align'
+import { FontFamily } from '@tiptap/extension-font-family'
 import { ComposeToolbar } from './compose-toolbar'
 
 interface ComposeProps {
   isOpen: boolean
   onClose: () => void
+  /** Render as an inline panel inside the sidebar instead of a modal overlay */
+  inline?: boolean
   replyTo?: {
     to: string
     subject: string
@@ -55,7 +62,7 @@ async function serializeAttachments(files: File[]) {
   )
 }
 
-export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
+export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposeProps) {
   const { saveDraft } = useEmail()
 
   const [to, setTo] = useState<string[]>(() => (replyTo?.to ? [replyTo.to] : []))
@@ -85,7 +92,22 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
         heading: { levels: [1, 2, 3] },
       }),
       Underline,
-      Image.configure({ inline: true, allowBase64: true }),
+      TextStyle,
+      FontSize,
+      Color,
+      Highlight.configure({ multicolor: true }),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      FontFamily.configure({
+        types: ['textStyle'],
+      }),
+      Image.configure({
+        inline: false,
+        allowBase64: true,
+        resize: { enabled: true },
+        HTMLAttributes: {
+          class: 'rounded-sm max-w-full',
+        },
+      }),
       Link.configure({
         openOnClick: false,
         autolink: true,
@@ -98,7 +120,8 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
     content: initialBodyHtml,
     editorProps: {
       attributes: {
-        class: 'min-h-[180px] outline-none font-mono text-sm text-foreground',
+        class: 'min-h-[180px] outline-none font-sans text-sm text-foreground',
+        style: 'font-family: Arial, Helvetica, sans-serif',
       },
     },
     onUpdate: ({ editor }) => {
@@ -197,9 +220,34 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
-    if (files) {
-      setAttachments([...attachments, ...Array.from(files)])
+    if (!files) return
+
+    const imageFiles: File[] = []
+    const docFiles: File[] = []
+
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('image/')) {
+        imageFiles.push(file)
+      } else {
+        docFiles.push(file)
+      }
     }
+
+    // Images → embed inline in editor as base64 data URL
+    for (const file of imageFiles) {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const src = ev.target?.result as string
+        editor?.chain().focus().setImage({ src }).run()
+      }
+      reader.readAsDataURL(file)
+    }
+
+    // Documents → regular attachments (sent as MIME parts)
+    if (docFiles.length > 0) {
+      setAttachments((prev) => [...prev, ...docFiles])
+    }
+
     e.target.value = ''
   }
 
@@ -289,6 +337,119 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
 
   if (!isOpen) return null
 
+  // ── Inline panel mode (rendered inside the sidebar) ──────────────────────
+  if (inline) {
+    return (
+      <div className="flex flex-col h-full border-t border-[var(--sidebar-border)] bg-[var(--card)]">
+        {/* Inline header */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)]">
+          <h2 className="font-mono text-xs font-semibold text-[var(--foreground)]">
+            {replyTo ? 'Reply' : 'New Message'}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-6 h-6 flex items-center justify-center rounded-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-elevated)] transition-colors"
+            aria-label="Close compose"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* To */}
+        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--border)]">
+          <span className="w-6 font-mono text-[11px] text-muted-foreground shrink-0">To:</span>
+          <div className="flex flex-1 flex-wrap gap-1">
+            {to.map((email) => (
+              <Badge
+                key={email}
+                variant="secondary"
+                className="font-mono text-[10px] gap-0.5 pr-0.5 h-5"
+              >
+                {email}
+                <button
+                  onClick={() => removeRecipient(email, to, setTo)}
+                  className="hover:text-destructive"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </Badge>
+            ))}
+            <input
+              type="email"
+              value={toInput}
+              onChange={(e) => setToInput(e.target.value)}
+              onKeyDown={(e) => handleRecipientKeyDown(e, toInput, to, setTo, setToInput)}
+              onBlur={() => addRecipient(toInput, to, setTo, setToInput)}
+              placeholder={to.length === 0 ? ' recipient' : ''}
+              className="min-w-[80px] flex-1 border-none bg-transparent font-mono text-[11px] outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+        </div>
+
+        {/* Subject */}
+        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--border)]">
+          <span className="w-6 font-mono text-[11px] text-muted-foreground shrink-0">Sub:</span>
+          <input
+            type="text"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="Subject"
+            className="flex-1 border-none bg-transparent font-mono text-[11px] outline-none placeholder:text-muted-foreground text-[var(--foreground)]"
+          />
+        </div>
+
+        {/* Editor — scrolls internally */}
+        <div className="flex-1 overflow-y-auto p-2">
+          {editor && <ComposeToolbar editor={editor} />}
+          <EditorContent
+            editor={editor}
+            className="[&_.ProseMirror]:min-h-[120px] [&_.ProseMirror]:outline-none [&_.ProseMirror]:font-sans [&_.ProseMirror]:text-[12px] [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none"
+          />
+        </div>
+
+        {/* Inline footer */}
+        <div className="flex items-center justify-between px-3 py-2 border-t border-[var(--border)]">
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => document.getElementById('inline-attachment-input')?.click()}
+            >
+              <Paperclip className="w-3 h-3" />
+              <input
+                id="inline-attachment-input"
+                type="file"
+                multiple
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </Button>
+          </div>
+          <div className="flex items-center gap-1">
+            {sendError && (
+              <span className="font-mono text-[10px] text-destructive mr-1">{sendError}</span>
+            )}
+            <Button
+              onClick={handleSend}
+              disabled={isSending}
+              size="sm"
+              className="font-mono text-[11px] h-6 px-2 bg-accent text-background hover:bg-accent/90"
+            >
+              {isSending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Send className="w-3 h-3" />
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Modal overlay mode ────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 bg-black/50 md:bg-transparent">
       <button
@@ -443,7 +604,7 @@ export function Compose({ isOpen, onClose, replyTo }: ComposeProps) {
               {editor && <ComposeToolbar editor={editor} />}
               <EditorContent
                 editor={editor}
-                className="[&_.ProseMirror]:min-h-[180px] [&_.ProseMirror]:outline-none [&_.ProseMirror]:font-mono [&_.ProseMirror]:text-sm [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none"
+                className="[&_.ProseMirror]:min-h-[180px] [&_.ProseMirror]:outline-none [&_.ProseMirror]:font-sans [&_.ProseMirror]:text-sm [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none"
               />
             </ScrollArea>
           </div>

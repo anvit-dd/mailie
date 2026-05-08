@@ -28,6 +28,8 @@ interface EmailContextType {
   deleteDraft: (id: string) => void
   updateDraft: (id: string, draft: Partial<Draft>) => void
   avatarMap: Record<string, string>
+  toggleStar: (emailId: string, isStarred: boolean) => Promise<void>
+  trashEmail: (emailId: string) => Promise<void>
 }
 
 const EmailContext = createContext<EmailContextType | undefined>(undefined)
@@ -180,7 +182,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
             if (!isCurrentRequest()) return emailsRef.current
             if (avatarRes.ok) {
               const avatarData: Record<string, string> = await avatarRes.json()
-              setAvatarMap(avatarData)
+              // Merge: keep previously cached avatars, add new ones
+              setAvatarMap((prev) => ({ ...prev, ...avatarData }))
             }
           } catch {
             // Non-fatal — avatars are optional
@@ -231,13 +234,19 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
 
       const detail = gmailMessageToDetail(message)
 
-      // Mark as read (fire-and-forget)
+      // Mark as read (fire-and-forget) + optimistic update in emails list
       if (message.labelIds?.includes('UNREAD')) {
         fetch('/api/gmail/modify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messageId: id, removeLabels: ['UNREAD'] }),
         }).catch(console.error)
+        // Optimistic: update emails[] so the unread badge disappears immediately
+        setEmails((prev) =>
+          prev.map((email) =>
+            email.id === id ? { ...email, isRead: true } : email
+          )
+        )
       }
 
       setSelectedEmail(detail)
@@ -249,6 +258,13 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       setPendingEmailId(null)
     }
   }, [])
+
+  // Strip base64 image data URLs from HTML before saving to localStorage.
+  // Base64 images are large (megabytes) and will QuotaExceededError.
+  // They can't be restored in draft form anyway — user re-attaches them.
+  function stripBase64Images(html: string): string {
+    return html.replace(/<img[^>]*src="data:image\/[^"]+"[^>]*>/g, '<img src="/draft-image-placeholder.png" alt="[image]" />')
+  }
 
   const saveDraft = useCallback((draft: Draft) => {
     setDrafts((prev) => {
@@ -264,16 +280,23 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     })
 
     if (typeof window !== 'undefined') {
-      const currentDrafts = readStoredDrafts()
-      const draftId = draft.id || `draft_${Date.now()}`
-      const nextDraft = { ...draft, id: draftId }
-      const existing = currentDrafts.findIndex((item) => item.id === draft.id)
-      if (existing >= 0) {
-        currentDrafts[existing] = nextDraft
-      } else {
-        currentDrafts.push(nextDraft)
+      try {
+        const currentDrafts = readStoredDrafts()
+        const draftId = draft.id || `draft_${Date.now()}`
+        // Strip base64 images from body to avoid localStorage quota limits
+        const bodyForStorage = stripBase64Images(draft.body)
+        const nextDraft = { ...draft, id: draftId, body: bodyForStorage }
+        const existing = currentDrafts.findIndex((item) => item.id === draft.id)
+        if (existing >= 0) {
+          currentDrafts[existing] = nextDraft
+        } else {
+          currentDrafts.push(nextDraft)
+        }
+        localStorage.setItem('mailie_drafts', JSON.stringify(currentDrafts))
+      } catch (err) {
+        // QuotaExceededError or other localStorage error — fail silently
+        console.warn('[mailie] Failed to save draft to localStorage:', err)
       }
-      localStorage.setItem('mailie_drafts', JSON.stringify(currentDrafts))
     }
   }, [])
 
@@ -281,11 +304,15 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     setDrafts((prev) => prev.filter((draft) => draft.id !== id))
 
     if (typeof window !== 'undefined') {
-      const currentDrafts = readStoredDrafts()
-      localStorage.setItem(
-        'mailie_drafts',
-        JSON.stringify(currentDrafts.filter((draft) => draft.id !== id))
-      )
+      try {
+        const currentDrafts = readStoredDrafts()
+        localStorage.setItem(
+          'mailie_drafts',
+          JSON.stringify(currentDrafts.filter((draft) => draft.id !== id))
+        )
+      } catch (err) {
+        console.warn('[mailie] Failed to delete draft from localStorage:', err)
+      }
     }
   }, [])
 
@@ -293,9 +320,81 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     setDrafts((prev) => prev.map((draft) => (draft.id === id ? { ...draft, ...updates } : draft)))
 
     if (typeof window !== 'undefined') {
-      const currentDrafts = readStoredDrafts()
-      const updatedDrafts = currentDrafts.map((draft) => (draft.id === id ? { ...draft, ...updates } : draft))
-      localStorage.setItem('mailie_drafts', JSON.stringify(updatedDrafts))
+      try {
+        const currentDrafts = readStoredDrafts()
+        const updatedDrafts = currentDrafts.map((draft) => {
+          if (draft.id !== id) return draft
+          // Strip base64 images if body is being updated
+          const bodyForStorage = updates.body ? stripBase64Images(updates.body) : draft.body
+          return { ...draft, ...updates, body: bodyForStorage }
+        })
+        localStorage.setItem('mailie_drafts', JSON.stringify(updatedDrafts))
+      } catch (err) {
+        console.warn('[mailie] Failed to update draft in localStorage:', err)
+      }
+    }
+  }, [])
+
+  const toggleStar = useCallback(async (emailId: string, isStarred: boolean) => {
+    // Optimistic update — update the email in the list immediately
+    setEmails((prev) =>
+      prev.map((email) =>
+        email.id === emailId ? { ...email, isStarred: !isStarred } : email
+      )
+    )
+    // Also update selectedEmail if it's the one being starred/unstarred
+    setSelectedEmail((prev) =>
+      prev?.id === emailId ? { ...prev, isStarred: !isStarred } : prev
+    )
+
+    try {
+      const res = await fetch('/api/gmail/modify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId: emailId,
+          addLabels: isStarred ? [] : ['STARRED'],
+          removeLabels: isStarred ? ['STARRED'] : [],
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to toggle star')
+    } catch (err) {
+      console.error('Failed to toggle star:', err)
+      // Revert optimistic update on failure
+      setEmails((prev) =>
+        prev.map((email) =>
+          email.id === emailId ? { ...email, isStarred } : email
+        )
+      )
+      setSelectedEmail((prev) =>
+        prev?.id === emailId ? { ...prev, isStarred } : prev
+      )
+    }
+  }, [])
+
+  const trashEmail = useCallback(async (emailId: string) => {
+    // Optimistic remove from list
+    let removedEmail: Email | undefined
+    setEmails((prev) => {
+      removedEmail = prev.find((e) => e.id === emailId)
+      return prev.filter((e) => e.id !== emailId)
+    })
+    // Clear selection if deleted email was selected
+    setSelectedEmail((prev) => (prev?.id === emailId ? null : prev))
+
+    try {
+      const res = await fetch('/api/gmail/trash', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: emailId }),
+      })
+      if (!res.ok) throw new Error('Failed to trash email')
+    } catch (err) {
+      console.error('Failed to trash email:', err)
+      // Revert on failure
+      if (removedEmail) {
+        setEmails((prev) => [removedEmail!, ...prev])
+      }
     }
   }, [])
 
@@ -320,6 +419,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
         deleteDraft,
         updateDraft,
         avatarMap,
+        toggleStar,
+        trashEmail,
       }}
     >
       {children}

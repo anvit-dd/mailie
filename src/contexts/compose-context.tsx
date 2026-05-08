@@ -1,0 +1,93 @@
+'use client'
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  type ReactNode,
+} from 'react'
+import type { EmailDetail } from '@/types/email'
+
+interface ReplyTo {
+  to: string
+  subject: string
+  body: string
+  inReplyTo?: string
+  references?: string
+  threadId?: string
+}
+
+interface ComposeContextValue {
+  isComposeOpen: boolean
+  setIsComposeOpen: (open: boolean) => void
+  replyTo: ReplyTo | undefined
+  setReplyTo: (reply: ReplyTo | undefined) => void
+  composeNonce: number
+  setComposeNonce: (nonce: number | ((prev: number) => number)) => void
+  handleCompose: () => void
+  handleReply: (email: EmailDetail) => void
+  handleForward: () => void
+}
+
+const ComposeContext = createContext<ComposeContextValue | null>(null)
+
+export function ComposeProvider({ children }: { children: ReactNode }) {
+  const [isComposeOpen, setIsComposeOpen] = useState(false)
+  const [replyTo, setReplyTo] = useState<ReplyTo | undefined>()
+  const [composeNonce, setComposeNonce] = useState(0)
+
+  const handleCompose = useCallback(() => {
+    setReplyTo(undefined)
+    setComposeNonce((n) => n + 1)
+    setIsComposeOpen(true)
+  }, [])
+
+  const handleReply = useCallback((email: EmailDetail) => {
+    setReplyTo({
+      to: email.from.email,
+      subject: email.subject.startsWith('Re:')
+        ? email.subject
+        : `Re: ${email.subject}`,
+      body: '', // empty — no auto-quote, threading via headers only
+      inReplyTo: email.inReplyTo || email.headers?.['Message-ID'] || undefined,
+      references:
+        email.references?.join(' ') ||
+        email.headers?.['References'] ||
+        undefined,
+      threadId: email.threadId,
+    })
+    setComposeNonce((n) => n + 1)
+    setIsComposeOpen(true)
+  }, [])
+
+  const handleForward = useCallback(() => {
+    setReplyTo(undefined)
+    setComposeNonce((n) => n + 1)
+    setIsComposeOpen(true)
+  }, [])
+
+  return (
+    <ComposeContext.Provider
+      value={{
+        isComposeOpen,
+        setIsComposeOpen,
+        replyTo,
+        setReplyTo,
+        composeNonce,
+        setComposeNonce,
+        handleCompose,
+        handleReply,
+        handleForward,
+      }}
+    >
+      {children}
+    </ComposeContext.Provider>
+  )
+}
+
+export function useCompose(): ComposeContextValue {
+  const ctx = useContext(ComposeContext)
+  if (!ctx) throw new Error('useCompose must be used within <ComposeProvider>')
+  return ctx
+}

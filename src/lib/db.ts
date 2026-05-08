@@ -40,6 +40,13 @@ db.exec(`
   );
 `)
 
+// Migrate old schema: add picture column if missing (CREATE TABLE IF NOT EXISTS won't alter existing tables)
+try {
+  db.exec(`ALTER TABLE accounts ADD COLUMN picture TEXT`)
+} catch {
+  // Column already exists — ignore
+}
+
 export interface Account {
   id: string
   email: string

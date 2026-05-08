@@ -28,10 +28,13 @@ export async function POST(request: NextRequest) {
   }
 
   // Fetch all messages in parallel — server-side so no connection limit issues
+  // format=full is required so callers get payload.body AND payload.parts (attachments)
+  // Using format=metadata would omit both, breaking hasAttachments in the list AND
+  // causing loadEmailDetail to always re-fetch (cache always misses since body/parts are undefined)
   const results = await Promise.allSettled(
     ids.map((id) =>
       fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date&metadataHeaders=Message-ID&metadataHeaders=References&metadataHeaders=In-Reply-To`,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       ).then((res) => {
         if (!res.ok) return null

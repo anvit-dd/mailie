@@ -39,8 +39,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast: "cn-toast",
-          title: "text-popover-foreground",
-          description: "text-popover-foreground/80",
         },
       }}
       {...props}

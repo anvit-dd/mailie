@@ -1,8 +1,7 @@
 'use client'
 
 import { Email } from '@/types/email'
-import { Badge } from '@/components/ui/badge'
-import { Paperclip, Star } from 'lucide-react'
+import { Paperclip, Star, Trash2 } from 'lucide-react'
 import { useEmail } from '@/contexts/email-context'
 import Image from 'next/image'
 
@@ -16,20 +15,10 @@ function formatRelativeDate(date: Date): string {
     const diffMins = Math.floor(diffMs / (1000 * 60))
     return diffMins <= 0 ? 'now' : `${diffMins}m`
   }
+  if (diffHours < 24) return `${diffHours}h`
+  if (diffDays === 1) return 'yesterday'
+  if (diffDays < 7) return `${diffDays}d`
 
-  if (diffHours < 24) {
-    return `${diffHours}h`
-  }
-
-  if (diffDays === 1) {
-    return 'yesterday'
-  }
-
-  if (diffDays < 7) {
-    return `${diffDays}d`
-  }
-
-  // Show date for older messages
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -43,17 +32,17 @@ interface EmailListItemProps {
 }
 
 export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps) {
-  const { avatarMap } = useEmail()
+  const { avatarMap, toggleStar, trashEmail } = useEmail()
   const avatarUrl = avatarMap[email.from.email]
 
   return (
     <button
       onClick={onClick}
       className={`
-        w-full text-left p-3 border-b border-border transition-colors
-        hover:bg-surface-elevated
+        w-full text-left px-3 py-2 transition-colors border-b border-[var(--border)] select-none
+        hover:bg-[var(--surface-elevated)]
         ${isSelected
-          ? 'bg-surface-elevated border-l-2 border-l-accent'
+          ? 'bg-[var(--surface-elevated)] border-l-2 border-l-[var(--accent)]'
           : 'border-l-2 border-l-transparent'
         }
       `}
@@ -65,45 +54,46 @@ export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps
             <Image
               src={avatarUrl}
               alt={email.from.name || email.from.email}
-              width={32}
-              height={32}
+              width={28}
+              height={28}
               unoptimized
-              className={`w-8 h-8 rounded-full object-cover ${email.isRead ? 'opacity-60' : ''}`}
+              className={`w-7 h-7 rounded-full object-cover ${email.isRead ? 'opacity-50' : ''}`}
               onError={(e) => {
                 const target = e.currentTarget as HTMLImageElement
-                // People API returned a photo but it's broken — replace with initials
                 const initial = (email.from.name || email.from.email).charAt(0).toUpperCase()
                 const parent = target.parentElement
                 if (parent) {
                   parent.innerHTML = email.isRead
-                    ? `<div class="w-8 h-8 rounded-full bg-muted/30 flex items-center justify-center"><span class="font-mono text-[10px] text-muted-foreground font-semibold">${initial}</span></div>`
-                    : `<div class="w-8 h-8 rounded-full bg-accent/15 flex items-center justify-center"><span class="font-mono text-xs text-accent font-semibold">${initial}</span></div>`
+                    ? `<div class="w-7 h-7 rounded-full bg-[var(--muted)] flex items-center justify-center"><span class="font-mono text-[10px] text-[var(--muted-foreground)] font-semibold">${initial}</span></div>`
+                    : `<div class="w-7 h-7 rounded-full bg-[var(--accent)]/15 flex items-center justify-center"><span class="font-mono text-[10px] text-[var(--accent)] font-semibold">${initial}</span></div>`
                 }
               }}
             />
           ) : (
-            // No avatar URL — show initials
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${email.isRead ? 'bg-muted/30' : 'bg-accent/15'}`}>
-              <span className={`font-mono text-xs font-semibold ${email.isRead ? 'text-[10px] text-muted-foreground' : 'text-xs text-accent'}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center ${email.isRead ? 'bg-[var(--muted)]' : 'bg-[var(--accent)]/15'}`}>
+              <span className={`font-mono text-[10px] font-semibold ${email.isRead ? 'text-[var(--muted-foreground)]' : 'text-[var(--accent)]'}`}>
                 {(email.from.name || email.from.email).charAt(0).toUpperCase()}
               </span>
             </div>
           )}
         </div>
 
-        {/* Content */}
+        {/* Content — 13px base, hierarchy via weight + muted color */}
         <div className="flex-1 min-w-0">
           {/* Top row: sender + date */}
           <div className="flex items-center justify-between gap-2 mb-0.5">
             <span
               className={`
-                font-mono text-xs truncate
-                ${email.isRead ? 'text-muted-foreground' : 'text-foreground font-semibold'}
+                font-mono text-[13px] truncate
+                ${email.isRead
+                  ? 'font-normal text-[var(--muted-foreground)]'
+                  : 'font-semibold text-[var(--foreground)]'
+                }
               `}
             >
               {email.from.name || email.from.email}
             </span>
-            <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+            <span className="font-mono text-[11px] text-[var(--muted-foreground)] shrink-0">
               {formatRelativeDate(email.date)}
             </span>
           </div>
@@ -111,40 +101,59 @@ export function EmailListItem({ email, isSelected, onClick }: EmailListItemProps
           {/* Subject */}
           <p
             className={`
-              font-mono text-sm truncate mb-0.5
-              ${email.isRead ? 'text-muted-foreground' : 'text-foreground'}
+              font-mono text-[13px] truncate mb-0.5 leading-snug
+              ${email.isRead ? 'font-normal text-[var(--muted-foreground)]' : 'text-[var(--foreground)]'}
             `}
           >
             {email.subject || '(no subject)'}
           </p>
 
-          {/* Preview + badges */}
-          <div className="flex items-center gap-2">
-            <p className="font-mono text-[11px] text-muted-foreground truncate flex-1">
+          {/* Preview + indicators */}
+          <div className="flex items-center gap-1.5">
+            <p className="font-mono text-[12px] text-[var(--muted-foreground)] truncate flex-1 leading-snug">
               {email.preview}
             </p>
             <div className="flex items-center gap-1 shrink-0">
-              {email.isStarred && (
-                <Star className="w-3 h-3 fill-accent text-accent" />
-              )}
               {email.hasAttachments && (
-                <Paperclip className="w-3 h-3 text-muted-foreground" />
+                <Paperclip className="w-3 h-3 text-[var(--muted-foreground)]" />
               )}
+              {email.isStarred ? (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); toggleStar(email.id, email.isStarred) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); toggleStar(email.id, email.isStarred) } }}
+                  className="p-0.5 rounded hover:bg-[var(--accent)]/20 transition-colors cursor-pointer"
+                  aria-label="Unstar email"
+                >
+                  <Star className="w-3 h-3 fill-[var(--accent)] text-[var(--accent)]" />
+                </span>
+              ) : (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); toggleStar(email.id, email.isStarred) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); toggleStar(email.id, email.isStarred) } }}
+                  className="p-0.5 rounded hover:bg-[var(--accent)]/20 transition-colors cursor-pointer"
+                  aria-label="Star email"
+                >
+                  <Star className="w-3 h-3 text-[var(--muted-foreground)]" />
+                </span>
+              )}
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); trashEmail(email.id) }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); trashEmail(email.id) } }}
+                className="p-0.5 rounded hover:bg-[var(--destructive)]/20 transition-colors cursor-pointer"
+                aria-label="Trash email"
+              >
+                <Trash2 className="w-3 h-3 text-[var(--muted-foreground)] hover:text-[var(--destructive)]" />
+              </span>
             </div>
           </div>
 
-          {/* Labels — always reserve height so rows stay uniform */}
-          <div className={`flex gap-1 mt-1 ${email.labels.length === 0 ? 'h-4' : ''}`}>
-            {email.labels.slice(0, 2).map((label) => (
-              <Badge
-                key={label}
-                variant="outline"
-                className="font-mono text-[9px] px-1 py-0 h-4"
-              >
-                {label}
-              </Badge>
-            ))}
-          </div>
+
         </div>
       </div>
     </button>

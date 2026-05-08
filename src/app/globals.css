@@ -38,69 +38,171 @@
   --radius-xl: calc(var(--radius) * 1.4);
 }
 
-/* Light mode (default) */
+/* ============================================
+   ZED DESIGN SYSTEM — 1:1 Implementation
+   One Dark palette from zed.dev/theme-builder
+   ============================================ */
+
+/* ---- LIGHT MODE ---- */
 :root {
-  --background: #f4f4f5;
-  --foreground: #18181b;
-  --card: #ffffff;
-  --card-foreground: #18181b;
-  --popover: #ffffff;
+  /* Surfaces — warm light grays */
+  --background:     #f4f4f5;  /* page root */
+  --foreground:     #18181b;
+  --card:           #ffffff;
+  --card-foreground:#18181b;
+  --popover:        #ffffff;
   --popover-foreground: #18181b;
-  --primary: #18181b;
+
+  /* Primary — dark monochrome in light mode */
+  --primary:        #18181b;
   --primary-foreground: #f4f4f5;
-  --secondary: #e4e4e7;
+
+  /* Secondary */
+  --secondary:      #e4e4e7;
   --secondary-foreground: #18181b;
-  --muted: #e4e4e7;
+
+  /* Muted */
+  --muted:          #e4e4e7;
   --muted-foreground: #71717a;
-  --accent: #18181b;
+
+  /* Accent */
+  --accent:         #18181b;
   --accent-foreground: #f4f4f5;
-  --destructive: #ef4444;
-  --border: #d4d4d8;
-  --input: #d4d4d8;
-  --ring: #18181b;
-  --radius: 0.125rem;
-  --sidebar: #ffffff;
+
+  /* Destructive */
+  --destructive:   #ef4444;
+  --destructive-foreground: #f4f4f5;
+
+  /* Borders */
+  --border:         #d4d4d8;
+  --input:          #d4d4d8;
+  --ring:           #18181b;
+
+  /* Radius — Zed uses near-zero radius */
+  --radius:         0.125rem;
+
+  /* Sidebar */
+  --sidebar:        #ffffff;
   --sidebar-foreground: #18181b;
   --sidebar-primary: #18181b;
   --sidebar-primary-foreground: #f4f4f5;
-  --sidebar-accent: #e4e4e7;
+  --sidebar-accent:  #e4e4e7;
   --sidebar-accent-foreground: #18181b;
-  --sidebar-border: #d4d4d8;
-  --sidebar-ring: #18181b;
+  --sidebar-border:  #d4d4d8;
+  --sidebar-ring:    #18181b;
+
+  /* Status */
+  --status-active:  #16a34a;
 }
 
-/* Dark mode */
+/* ---- DARK MODE — ZED ONE DARK ---- */
 .dark {
-  --background: #0c0c0c;
-  --foreground: #e8e8e8;
-  --card: #141414;
-  --card-foreground: #e8e8e8;
-  --popover: #141414;
-  --popover-foreground: #e8e8e8;
-  --primary: #e8e8e8;
-  --primary-foreground: #0c0c0c;
-  --secondary: #1a1a1a;
-  --secondary-foreground: #e8e8e8;
-  --muted: #1a1a1a;
-  --muted-foreground: #888888;
-  --accent: #ffffff;
-  --accent-foreground: #0c0c0c;
-  --destructive: #ff4444;
-  --border: #2a2a2a;
-  --input: #2a2a2a;
-  --ring: #ffffff;
-  --radius: 0.125rem;
-  --sidebar: #141414;
-  --sidebar-foreground: #e8e8e8;
-  --sidebar-primary: #ffffff;
-  --sidebar-primary-foreground: #0c0c0c;
-  --sidebar-accent: #1a1a1a;
-  --sidebar-accent-foreground: #e8e8e8;
-  --sidebar-border: #2a2a2a;
-  --sidebar-ring: #ffffff;
+  /* Editor canvas — darkest surface (#282C33) */
+  --background:     #282C33;
+  --foreground:     #DCE0E5;
+
+  /* Surface — panels, sidebar (#2F343E) */
+  --card:           #2F343E;
+  --card-foreground:#DCE0E5;
+  --popover:        #2F343E;
+  --popover-foreground: #DCE0E5;
+
+  /* Deep chrome — activity bar, title bar (#3B414D) */
+  /* Mapped to secondary for this app's layout */
+  --secondary:      #3B414D;
+  --secondary-foreground: #DCE0E5;
+
+  /* Muted surfaces use same as popover */
+  --muted:          #2F343E;
+  --muted-foreground: #A9AFBC;
+
+  /* Primary — Zed's soft blue accent */
+  --primary:        #74ADE8;
+  --primary-foreground: #282C33;
+
+  /* Accent — same blue for consistency */
+  --accent:         #74ADE8;
+  --accent-foreground: #282C33;
+
+  /* Destructive — Git deleted red */
+  --destructive:    #E06C76;
+  --destructive-foreground: #DCE0E5;
+
+  /* Borders — warm grays, never harsh */
+  --border:          #464B57;
+  --input:           #2F343E;
+  --ring:            #74ADE8;
+
+  /* Radius — Zed uses near-zero radius */
+  --radius:          0.125rem;
+
+  /* Sidebar — surface.background (#2F343E) */
+  --sidebar:         #2F343E;
+  --sidebar-foreground: #DCE0E5;
+  --sidebar-primary: #74ADE8;
+  --sidebar-primary-foreground: #282C33;
+  --sidebar-accent:  #3B414D;
+  --sidebar-accent-foreground: #DCE0E5;
+  --sidebar-border:  #464B57;
+  --sidebar-ring:    #74ADE8;
+
+  /* Status */
+  --status-active:   #27A657;
 }
 
-/* Light scrollbar */
+/* ---- CUSTOM SURFACE TOKENS ---- */
+@variant dark (&:is(.dark *));
+
+/* Light mode — warm neutral surfaces */
+:root {
+  /* Elevated surface for hover/active states */
+  --surface-elevated: #e4e4e7;
+  /* Deep chrome — activity bar (slightly darker than sidebar for depth) */
+  --surface-deep: #e4e4e7;
+  /* Editor canvas — same as background for unified surface */
+  --editor-bg: #f4f4f5;
+  /* Toolbar background */
+  --toolbar-bg: #f4f4f5;
+}
+
+/* Dark mode — Zed One Dark */
+.dark {
+  --surface-elevated: #3B414D;
+  --surface-deep: #3B414D;
+  --editor-bg: #282C33;
+  --toolbar-bg: #282C33;
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Zed: 13px base, all hierarchy via weight + opacity */
+  html {
+    font-size: 13px;
+    @apply font-mono antialiased;
+  }
+}
+
+/* ============================================
+   SCROLLBARS — ZED PALETTE
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+/* Light mode */
 ::-webkit-scrollbar-track {
   background: #f4f4f5;
 }
@@ -112,43 +214,94 @@
   background: #a1a1aa;
 }
 
-/* Dark scrollbar */
+/* Dark mode — Zed warm grays */
 .dark ::-webkit-scrollbar-track {
-  background: #0c0c0c;
+  background: #282C33;
 }
 .dark ::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a3a;
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-mono;
-  }
-}
-
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #0c0c0c;
-}
-::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
+  background: #464B57;
   border-radius: 3px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #3a3a3a;
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #5A6270;
 }
 
-/* Email viewer styles are injected into the iframe srcDoc now. */
+/* ============================================
+   ZED FOCUS STATES
+   Uses muted blue (#47679E), not bright accent
+   ============================================ */
+
+.dark *:focus-visible {
+  outline-color: #47679E;
+  outline-offset: 1px;
+}
+
+/* ============================================
+   EMAIL VIEWER
+   Injected into iframe srcdoc — not affected
+   by host app styles
+   ============================================ */
+
+/* ============================================
+   REACT IMAGE CROP — DARK MODE OVERRIDES
+   ============================================ */
+.dark .ReactCrop {
+  --react-crop-bg: #282C33;
+}
+
+.dark .ReactCrop__crop-selection {
+  border-color: #74ADE8;
+  box-shadow: 0 0 0 1px #74ADE8;
+}
+
+.dark .ReactCrop__drag-handle {
+  background-color: #74ADE8;
+}
+
+.dark .ReactCrop__drag-handle::after {
+  border-color: #74ADE8;
+}
+
+.dark .ReactCrop--disabled .ReactCrop__crop-selection {
+  border-color: #A9AFBC;
+}
+
+/* ============================================
+/* TIPTAP IMAGE RESIZE HANDLES
+   TipTap's ResizableNodeView creates [data-resize-wrapper] + [data-resize-handle]
+   Fix: force handles visible + hardcode #74ADE8 color
+   ============================================ */
+
+[data-resize-wrapper] {
+  position: relative !important;
+  display: block !important;
+}
+
+[data-resize-wrapper] img {
+  max-width: 100%;
+  display: block;
+}
+
+/* Resize handles — always visible, hardcoded #74ADE8 (not var(--primary)) */
+[data-resize-handle] {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #74ADE8 !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  border-radius: 2px;
+  z-index: 20;
+  box-sizing: border-box;
+  /* Override TipTap's container visibility:hidden on the wrapper */
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* Corner handles — positioned at image corners */
+[data-resize-handle='top-left']    { top: -5px;  left: -5px;  cursor: nw-resize; }
+[data-resize-handle='top-right']   { top: -5px;  right: -5px; cursor: ne-resize; }
+[data-resize-handle='bottom-left'] { bottom: -5px; left: -5px;  cursor: sw-resize; }
+[data-resize-handle='bottom-right']{ bottom: -5px; right: -5px; cursor: se-resize; }
+
+[data-resize-handle]:hover { background: #a9afbc !important; }

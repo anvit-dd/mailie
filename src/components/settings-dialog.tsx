@@ -1,17 +1,15 @@
 'use client'
 
-import { useState } from 'react'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogClose,
 } from '@/components/ui/dialog'
 import { useTheme } from '@/contexts/theme-context'
 import { Button } from '@/components/ui/button'
-import { Sun, Moon, Monitor, ChevronRight, Wifi, Shield, Bell, Info } from 'lucide-react'
+import { Sun, Moon, Wifi, Shield, Bell, Info } from 'lucide-react'
 
 interface SettingsDialogProps {
   open: boolean
@@ -31,13 +29,13 @@ function SettingRow({
 }) {
   return (
     <div className="flex items-center gap-3 py-3 px-1">
-      <div className="w-8 h-8 rounded-sm bg-secondary flex items-center justify-center shrink-0">
-        <Icon className="w-4 h-4 text-muted-foreground" />
+      <div className="w-8 h-8 rounded-sm bg-[var(--secondary)] flex items-center justify-center shrink-0">
+        <Icon className="w-4 h-4 text-[var(--muted-foreground)]" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium">{label}</p>
+        <p className="text-[13px] text-[var(--foreground)]">{label}</p>
         {description && (
-          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+          <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">{description}</p>
         )}
       </div>
       {right}
@@ -48,14 +46,8 @@ function SettingRow({
 function ThemeSelector() {
   const { theme, setTheme } = useTheme()
 
-  const options = [
-    { value: 'light' as const, label: 'Light', icon: Sun },
-    { value: 'dark' as const, label: 'Dark', icon: Moon },
-    { value: 'dark' as const, label: 'System', icon: Monitor },
-  ]
-
   return (
-    <div className="flex gap-1 p-1 bg-secondary rounded-md">
+    <div className="flex gap-1 p-1 bg-[var(--secondary)] rounded-sm">
       {[
         { value: 'light' as const, label: 'Light', icon: Sun },
         { value: 'dark' as const, label: 'Dark', icon: Moon },
@@ -64,11 +56,11 @@ function ThemeSelector() {
           key={value}
           onClick={() => setTheme(value)}
           className={`
-            flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-sm text-xs font-mono
+            flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-sm text-[12px] font-mono
             transition-colors cursor-pointer
             ${theme === value
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
+              ? 'bg-[var(--background)] text-[var(--foreground)] shadow-sm'
+              : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
             }
           `}
         >
@@ -82,7 +74,7 @@ function ThemeSelector() {
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground px-1 pt-4 pb-2">
+    <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted-foreground)] px-1 pt-4 pb-2">
       {children}
     </p>
   )
@@ -91,10 +83,10 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-sm bg-[var(--popover)] border-[var(--border)]">
         <DialogHeader>
-          <DialogTitle className="font-mono text-base">Settings</DialogTitle>
-          <DialogDescription className="font-mono text-xs">
+          <DialogTitle className="font-mono text-[14px] text-[var(--foreground)]">Settings</DialogTitle>
+          <DialogDescription className="font-mono text-[11px] text-[var(--muted-foreground)]">
             Customize your mailie experience.
           </DialogDescription>
         </DialogHeader>
@@ -102,7 +94,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         <div className="py-2">
           <SectionHeader>Appearance</SectionHeader>
           <SettingRow
-            icon={theme => <Moon {...theme} />}
+            icon={Moon}
             label="Theme"
             description="Switch between light and dark mode"
             right={<ThemeSelector />}
@@ -113,7 +105,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             icon={Wifi}
             label="Connected"
             description="Gmail via OAuth"
-            right={<span className="text-xs font-mono text-green-500">Active</span>}
+            right={<span className="text-[11px] font-mono text-[var(--status-active)]">Active</span>}
           />
 
           <SettingRow
@@ -121,7 +113,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             label="Security"
             description="End-to-end encryption"
             right={
-              <span className="text-xs font-mono text-muted-foreground">Coming soon</span>
+              <span className="text-[11px] font-mono text-[var(--muted-foreground)]">Coming soon</span>
             }
           />
 
@@ -131,7 +123,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             label="Push notifications"
             description="Get notified for new emails"
             right={
-              <span className="text-xs font-mono text-muted-foreground">Coming soon</span>
+              <span className="text-[11px] font-mono text-[var(--muted-foreground)]">Coming soon</span>
             }
           />
 
@@ -140,7 +132,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             icon={Info}
             label="mailie_"
             description="Minimal email client"
-            right={<span className="text-xs font-mono text-muted-foreground">v0.1</span>}
+            right={<span className="text-[11px] font-mono text-[var(--muted-foreground)]">v0.1</span>}
           />
         </div>
       </DialogContent>
