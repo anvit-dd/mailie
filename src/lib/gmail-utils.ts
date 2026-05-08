@@ -311,6 +311,7 @@ export function gmailMessageToDetail(message: GmailMessage): EmailDetail {
 export function getFolders(): Folder[] {
   return [
     { id: 'INBOX', name: 'Inbox', icon: 'inbox', unreadCount: 0 },
+    { id: 'STARRED', name: 'Starred', icon: 'star', unreadCount: 0 },
     { id: 'SPAM', name: 'Spam', icon: 'spam', unreadCount: 0 },
     { id: 'SENT', name: 'Sent', icon: 'send', unreadCount: 0 },
     { id: 'DRAFT', name: 'Drafts', icon: 'file', unreadCount: 0 },
