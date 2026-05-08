@@ -43,10 +43,11 @@ export async function GET(request: NextRequest) {
     const message = (await response.json()) as GmailMessage
     const { body, bodyPlain } = extractBody(message.payload)
 
+    const isPlainText = !body && Boolean(bodyPlain)
     const htmlBody = body || (bodyPlain ? `<pre style="white-space: pre-wrap;">${escapeHtml(bodyPlain)}</pre>` : '')
     const sanitizedHtml = htmlBody ? sanitizeAndProxyEmailHtml(htmlBody, messageId, theme) : ''
 
-    return NextResponse.json({ html: sanitizedHtml })
+    return NextResponse.json({ html: sanitizedHtml, plainText: isPlainText, bodyPlain })
   } catch (error) {
     console.error('Email fetch error:', error)
     return NextResponse.json({ error: 'Error loading email' }, { status: 500 })
@@ -105,10 +106,11 @@ export async function POST(request: NextRequest) {
 
     const message = (await response.json()) as GmailMessage
     const { body: emailBody, bodyPlain } = extractBody(message.payload)
+    const isPlainText = !emailBody && Boolean(bodyPlain)
     const htmlBody = emailBody || (bodyPlain ? `<pre style="white-space: pre-wrap;">${escapeHtml(bodyPlain)}</pre>` : '')
     const sanitizedHtml = htmlBody ? sanitizeAndProxyEmailHtml(htmlBody, messageId, isDark) : ''
 
-    return NextResponse.json({ html: sanitizedHtml })
+    return NextResponse.json({ html: sanitizedHtml, plainText: isPlainText, bodyPlain })
   } catch (error) {
     console.error('Email fetch error:', error)
     return NextResponse.json({ error: 'Error loading email' }, { status: 500 })

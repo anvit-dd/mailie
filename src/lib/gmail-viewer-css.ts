@@ -22,6 +22,7 @@ export const EMAIL_VIEWER_CSS = `
 
   body {
     background: var(--iframe-bg, #ffffff);
+    color: var(--iframe-fg, #18181b);
     /* Only set these so raw text in an email without ANY styling is readable.
      * font-family and font-size are intentionally generic — email's inline styles
      * override these when present. */
@@ -34,6 +35,27 @@ export const EMAIL_VIEWER_CSS = `
   }
 
   html[data-plain-text="true"] body {
-    color: var(--iframe-fg, #000000);
+    color: var(--iframe-fg, #18181b);
+  }
+
+  div[style*="text-align:center"] > img,
+  p[style*="text-align:center"] > img {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  div[style*="text-align:right"] > img,
+  p[style*="text-align:right"] > img {
+    display: block;
+    margin-left: auto;
+    margin-right: 0;
+  }
+
+  div[style*="text-align:left"] > img,
+  p[style*="text-align:left"] > img {
+    display: block;
+    margin-left: 0;
+    margin-right: auto;
   }
 `

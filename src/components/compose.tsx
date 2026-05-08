@@ -21,6 +21,21 @@ import { TextAlign } from '@tiptap/extension-text-align'
 import { FontFamily } from '@tiptap/extension-font-family'
 import { ComposeToolbar } from './compose-toolbar'
 
+const AlignableImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      align: {
+        default: 'left',
+        parseHTML: (element) => element.getAttribute('data-align') || 'left',
+        renderHTML: (attributes) => ({
+          'data-align': attributes.align || 'left',
+        }),
+      },
+    }
+  },
+})
+
 interface ComposeProps {
   isOpen: boolean
   onClose: () => void
@@ -62,6 +77,102 @@ async function serializeAttachments(files: File[]) {
   )
 }
 
+function getInlineImageDimensions(src: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const image = new window.Image()
+    image.onload = () => {
+      const maxWidth = 480
+      const naturalWidth = image.naturalWidth || maxWidth
+      const naturalHeight = image.naturalHeight || maxWidth
+      const scale = naturalWidth > maxWidth ? maxWidth / naturalWidth : 1
+
+      resolve({
+        width: Math.round(naturalWidth * scale),
+        height: Math.round(naturalHeight * scale),
+      })
+    }
+    image.onerror = () => resolve({ width: 320, height: 240 })
+    image.src = src
+  })
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read image blob'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function materializeInlineImages(html: string): Promise<string> {
+  const document = new DOMParser().parseFromString(html, 'text/html')
+  const images = Array.from(document.querySelectorAll('img[src^="blob:"]'))
+
+  await Promise.all(images.map(async (image) => {
+    const src = image.getAttribute('src')
+    if (!src) return
+
+    const response = await fetch(src)
+    if (!response.ok) return
+
+    image.setAttribute('src', await blobToDataUrl(await response.blob()))
+  }))
+
+  return document.body.innerHTML
+}
+
+function serializeImageAlignment(html: string): string {
+  const document = new DOMParser().parseFromString(html, 'text/html')
+  const images = Array.from(document.querySelectorAll('img[data-align]'))
+
+  for (const image of images) {
+    const align = image.getAttribute('data-align')
+    if (align !== 'center' && align !== 'right' && align !== 'left') continue
+
+    const existingStyle = image.getAttribute('style') || ''
+    const width = image.getAttribute('width')
+    const height = image.getAttribute('height')
+    const sizeStyle = [
+      width ? `width: ${Number.parseFloat(width)}px` : '',
+      height ? `height: ${Number.parseFloat(height)}px` : '',
+    ].filter(Boolean).join('; ')
+
+    let alignStyle = 'display: block; float: none; margin-left: 0; margin-right: auto'
+    if (align === 'center') {
+      alignStyle = 'display: block; float: none; margin-left: auto; margin-right: auto'
+    } else if (align === 'right') {
+      alignStyle = 'display: block; float: none; margin-left: auto; margin-right: 0'
+    }
+
+    image.setAttribute('style', [existingStyle, sizeStyle, alignStyle].filter(Boolean).join('; '))
+
+    const parent = image.parentElement
+    if (parent?.tagName.toLowerCase() === 'div' && parent.getAttribute('data-mailie-image-align') === 'true') {
+      parent.setAttribute('align', align)
+      parent.setAttribute('style', `text-align: ${align};`)
+      continue
+    }
+
+    const wrapper = document.createElement('div')
+    wrapper.setAttribute('data-mailie-image-align', 'true')
+    wrapper.setAttribute('align', align)
+    wrapper.setAttribute('style', `text-align: ${align};`)
+    image.replaceWith(wrapper)
+    wrapper.appendChild(image)
+  }
+
+  const alignedBlocks = Array.from(document.body.querySelectorAll<HTMLElement>('[style*="text-align"]'))
+  for (const block of alignedBlocks) {
+    const textAlign = block.style.textAlign
+    if (textAlign === 'left' || textAlign === 'center' || textAlign === 'right') {
+      block.setAttribute('align', textAlign)
+    }
+  }
+
+  return document.body.innerHTML
+}
+
 export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposeProps) {
   const { saveDraft } = useEmail()
 
@@ -100,12 +211,18 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
       FontFamily.configure({
         types: ['textStyle'],
       }),
-      Image.configure({
+      AlignableImage.configure({
         inline: false,
         allowBase64: true,
-        resize: { enabled: true },
+        resize: {
+          enabled: true,
+          directions: ['top-left', 'top-right', 'bottom-left', 'bottom-right'],
+          minWidth: 80,
+          minHeight: 60,
+          alwaysPreserveAspectRatio: true,
+        },
         HTMLAttributes: {
-          class: 'rounded-sm max-w-full',
+          class: 'rounded-sm',
         },
       }),
       Link.configure({
@@ -118,6 +235,7 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
       }),
     ],
     content: initialBodyHtml,
+    shouldRerenderOnTransaction: true,
     editorProps: {
       attributes: {
         class: 'min-h-[180px] outline-none font-sans text-sm text-foreground',
@@ -236,9 +354,10 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
     // Images → embed inline in editor as base64 data URL
     for (const file of imageFiles) {
       const reader = new FileReader()
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
         const src = ev.target?.result as string
-        editor?.chain().focus().setImage({ src }).run()
+        const { width, height } = await getInlineImageDimensions(src)
+        editor?.chain().focus().setImage({ src, width, height }).run()
       }
       reader.readAsDataURL(file)
     }
@@ -273,7 +392,7 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
 
     try {
       const serializedAttachments = await serializeAttachments(attachments)
-      const body = editor.getHTML()
+      const body = serializeImageAlignment(await materializeInlineImages(editor.getHTML()))
 
       const res = await fetch('/api/gmail/send', {
         method: 'POST',

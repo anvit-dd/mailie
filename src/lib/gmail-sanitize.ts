@@ -72,6 +72,23 @@ function proxyImageUrls(html: string, messageId?: string): string {
   return next
 }
 
+function normalizeMailieImageAlignment(html: string): string {
+  return html.replace(/<img\b[^>]*\bdata-align=(["'])(left|center|right)\1[^>]*>/gi, (imgTag: string) => {
+    const withoutAlign = imgTag.replace(/\s+align=(["'])(left|center|right)\1/gi, '')
+    const styleMatch = withoutAlign.match(/\sstyle=(["'])(.*?)\1/i)
+    const floatSafeStyle = 'display: block; float: none;'
+
+    if (!styleMatch) {
+      return withoutAlign.replace(/>$/, ` style="${floatSafeStyle}">`)
+    }
+
+    const quote = styleMatch[1]
+    const style = styleMatch[2]
+    const nextStyle = `${style}; ${floatSafeStyle}`
+    return withoutAlign.replace(/\sstyle=(["'])(.*?)\1/i, ` style=${quote}${nextStyle}${quote}`)
+  })
+}
+
 /**
  * Full email HTML sanitization pipeline:
  *  1. Strip unsafe tags  (script, iframe, object, embed, form, svg, math)
@@ -102,6 +119,7 @@ export function sanitizeAndProxyEmailHtml(
 
   // Step 3: Proxy image URLs (must run before color stripping so URL rewriting is clean)
   sanitized = proxyImageUrls(sanitized, messageId)
+  sanitized = normalizeMailieImageAlignment(sanitized)
 
   // Step 4: Dark mode — strip inline colors so email's hardcoded grey/black text
   // doesn't show up invisible on dark backgrounds. Background-color is preserved.

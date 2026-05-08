@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { EMAIL_VIEWER_CSS } from '@/lib/gmail-viewer-css'
 import { stripHtml } from '@/lib/gmail-utils'
 import { useEffect, useRef, useState } from 'react'
-import { useTheme } from '@/contexts/theme-context'
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -91,7 +90,7 @@ const HEIGHT_MEASUREMENT_SCRIPT = `
 </script>
 `
 
-function buildSrcdoc(html: string, theme: 'light' | 'dark'): string {
+function buildSrcdoc(html: string): string {
   // Emails are full HTML documents with <html>, <head>, <body>.
   // Inject the complete sanitized HTML directly as the iframe content so all
   // CSS selectors (body > .container, html body .card, etc.) remain valid.
@@ -138,23 +137,19 @@ function buildSrcdoc(html: string, theme: 'light' | 'dark'): string {
     const document = parser.parseFromString(html, 'text/html')
     const plainText = isPlainTextEmail(document)
 
-    // Inject theme vars on <html> so plain-text emails match app theme.
+    // Plain text email should render as a stable email document, not inherit
+    // the app theme. Keep it black-on-white in both light and dark mode.
     const htmlEl = document.documentElement
     const existingBg = htmlEl.getAttribute('style') || ''
-    const iframeBg = plainText ? 'transparent' : '#ffffff'
-    const iframeFg = theme === 'dark' ? '#e8e8e8' : '#18181b'
+    const iframeBg = '#ffffff'
+    const iframeFg = '#18181b'
     htmlEl.setAttribute(
       'style',
       existingBg +
         (existingBg ? ' ' : '') +
-        `--iframe-bg: ${iframeBg}; color-scheme: ${theme};`
+        `--iframe-bg: ${iframeBg}; --iframe-fg: ${iframeFg}; color-scheme: light;`
     )
     htmlEl.setAttribute('data-plain-text', String(plainText))
-    if (plainText) {
-      htmlEl.style.setProperty('--iframe-fg', iframeFg)
-    } else {
-      htmlEl.style.removeProperty('--iframe-fg')
-    }
 
     const headEl = document.querySelector('head')
     if (headEl) {
@@ -167,16 +162,16 @@ function buildSrcdoc(html: string, theme: 'light' | 'dark'): string {
     // Inject height measurement script by inserting it before </body>
     return fullDoc.replace('</body>', `${HEIGHT_MEASUREMENT_SCRIPT}</body>`)
   } catch {
-    const iframeFg = theme === 'dark' ? '#e8e8e8' : '#18181b'
-    const iframeBg = 'transparent'
-    // Fallback: return as-is with white background (safe default)
+    const iframeBg = '#ffffff'
+    const iframeFg = '#18181b'
+    // Fallback: return as-is with fixed email colors.
     return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta http-equiv="Content-Security-Policy" content="script-src 'none'; frame-src 'none'; object-src 'none'; img-src 'self' https: data:;">
-  <style>:root{--iframe-bg:${iframeBg};color-scheme:${theme};}${iframeBg === 'transparent' ? '' : ''}</style>
+  <style>:root{--iframe-bg:${iframeBg};--iframe-fg:${iframeFg};color-scheme:light;}</style>
   <style>${EMAIL_VIEWER_CSS}</style>
 </head>
 <body>${html}</body>
@@ -217,6 +212,7 @@ function shouldRenderAsPlainText(html: string, apiPlainText: boolean): boolean {
     'div',
     'span',
     'p',
+    'pre',
     'br',
     'b',
     'strong',
@@ -239,7 +235,6 @@ function shouldRenderAsPlainText(html: string, apiPlainText: boolean): boolean {
 }
 
 function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: EmailDetail; noPadding?: boolean }) {
-  const { theme } = useTheme()
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [emailHtml, setEmailHtml] = useState<string | null>(null)
@@ -289,8 +284,8 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Email body — optionally no padding when embedded in a padded container */}
-      <div className={`flex-1 min-h-0 flex flex-col ${noPadding ? '' : 'p-4'}`}>
+      {/* Email body padding belongs to the email surface, so the padded area stays white. */}
+      <div className="flex-1 min-h-0 flex flex-col">
         {/* Email body — non-scrolling wrapper, iframe fills height and scrolls internally */}
         <div
           ref={scrollRef}
@@ -298,7 +293,7 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
         >
           {isLoading && (
             <div className="mb-3">
-              <p className="font-mono text-xs text-muted-foreground animate-pulse">
+              <p className={`font-mono text-xs text-muted-foreground animate-pulse ${noPadding ? 'px-3 pt-3' : 'px-4 pt-4'}`}>
                 Loading content...
               </p>
             </div>
@@ -306,7 +301,7 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
 
           {error && (
             <div className="mb-3">
-              <p className="font-mono text-xs text-destructive">
+              <p className={`font-mono text-xs text-destructive ${noPadding ? 'px-3 pt-3' : 'px-4 pt-4'}`}>
                 {error}
               </p>
             </div>
@@ -321,24 +316,26 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
                 display: 'block',
                 width: '100%',
                 height: '100%',
-                background: 'transparent',
+                background: '#ffffff',
+                padding: noPadding ? 12 : 16,
+                boxSizing: 'border-box',
               }}
               sandbox="allow-scripts"
               title={`Email: ${selectedEmail.subject}`}
-              srcDoc={buildSrcdoc(emailHtml, theme)}
+              srcDoc={buildSrcdoc(emailHtml)}
             />
           )}
 
           {/* Plain text fallback (no HTML body) */}
           {(isPlainTextHtml || (!emailHtml && !isLoading && !error && selectedEmail.bodyPlain)) && (
-            <pre className={`whitespace-pre-wrap ${noPadding ? 'p-3' : ''} text-sm text-foreground bg-transparent`}>
+            <pre className={`min-h-full w-full whitespace-pre-wrap bg-white text-sm text-[#18181b] ${noPadding ? 'p-3' : 'p-4'}`}>
               {plainTextBody || selectedEmail.bodyPlain}
             </pre>
           )}
 
           {/* No content */}
           {!emailHtml && !isLoading && !error && !selectedEmail.bodyPlain && (
-            <div>
+            <div className={noPadding ? 'p-3' : 'p-4'}>
               <p className="font-mono text-sm text-muted-foreground italic">
                 No content
               </p>

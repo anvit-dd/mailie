@@ -267,41 +267,97 @@
 }
 
 /* ============================================
-/* TIPTAP IMAGE RESIZE HANDLES
-   TipTap's ResizableNodeView creates [data-resize-wrapper] + [data-resize-handle]
-   Fix: force handles visible + hardcode #74ADE8 color
+   TIPTAP IMAGE RESIZE HANDLES
+   TipTap v3 Image.configure({ resize }) creates:
+   [data-resize-container] > [data-resize-wrapper] > img + [data-resize-handle]
    ============================================ */
 
-[data-resize-wrapper] {
+.ProseMirror [data-resize-container] {
+  align-items: flex-start !important;
+  max-width: 100% !important;
+  margin: 8px 0;
+  width: max-content;
+}
+
+.ProseMirror [data-resize-container][data-align='center'],
+.ProseMirror [data-resize-container]:has(img[data-align='center']) {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ProseMirror [data-resize-container][data-align='right'],
+.ProseMirror [data-resize-container]:has(img[data-align='right']) {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+.ProseMirror [data-resize-container][data-align='left'],
+.ProseMirror [data-resize-container]:has(img[data-align='left']) {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.ProseMirror [data-resize-wrapper] {
   position: relative !important;
   display: block !important;
+  max-width: 100% !important;
+  line-height: 0 !important;
 }
 
-[data-resize-wrapper] img {
-  max-width: 100%;
-  display: block;
+.ProseMirror [data-resize-wrapper] img {
+  display: block !important;
+  max-width: 100% !important;
+  height: auto !important;
+  user-select: none;
 }
 
-/* Resize handles — always visible, hardcoded #74ADE8 (not var(--primary)) */
-[data-resize-handle] {
-  position: absolute;
-  width: 10px;
-  height: 10px;
+.ProseMirror .ProseMirror-selectednode[data-resize-container] [data-resize-wrapper] img,
+.ProseMirror [data-resize-container][data-resize-state='true'] [data-resize-wrapper] img {
+  outline: 1px solid #74ADE8;
+}
+
+/* Resize handles — visible + large enough to grab in the small compose panel. */
+.ProseMirror [data-resize-handle] {
+  position: absolute !important;
+  width: 12px;
+  height: 12px;
   background: #74ADE8 !important;
   border: 1.5px solid rgba(255, 255, 255, 0.9);
   border-radius: 2px;
-  z-index: 20;
+  z-index: 30;
   box-sizing: border-box;
-  /* Override TipTap's container visibility:hidden on the wrapper */
+  transform: translate(var(--resize-x, 0), var(--resize-y, 0));
   visibility: visible !important;
   opacity: 1 !important;
   pointer-events: auto !important;
+  touch-action: none;
 }
 
 /* Corner handles — positioned at image corners */
-[data-resize-handle='top-left']    { top: -5px;  left: -5px;  cursor: nw-resize; }
-[data-resize-handle='top-right']   { top: -5px;  right: -5px; cursor: ne-resize; }
-[data-resize-handle='bottom-left'] { bottom: -5px; left: -5px;  cursor: sw-resize; }
-[data-resize-handle='bottom-right']{ bottom: -5px; right: -5px; cursor: se-resize; }
+.ProseMirror [data-resize-handle='top-left'] {
+  --resize-x: -50%;
+  --resize-y: -50%;
+  cursor: nwse-resize;
+}
 
-[data-resize-handle]:hover { background: #a9afbc !important; }
+.ProseMirror [data-resize-handle='top-right'] {
+  --resize-x: 50%;
+  --resize-y: -50%;
+  cursor: nesw-resize;
+}
+
+.ProseMirror [data-resize-handle='bottom-left'] {
+  --resize-x: -50%;
+  --resize-y: 50%;
+  cursor: nesw-resize;
+}
+
+.ProseMirror [data-resize-handle='bottom-right'] {
+  --resize-x: 50%;
+  --resize-y: 50%;
+  cursor: nwse-resize;
+}
+
+.ProseMirror [data-resize-handle]:hover {
+  background: #a9afbc !important;
+}

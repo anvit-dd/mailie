@@ -54,6 +54,15 @@ export async function GET(request: NextRequest) {
         return new NextResponse('Attachment not found for CID', { status: 404 })
       }
 
+      if (attachmentData.data) {
+        return new NextResponse(Buffer.from(normalizeBase64Url(attachmentData.data), 'base64'), {
+          headers: {
+            'Content-Type': attachmentData.mimeType || 'image/*',
+            'Cache-Control': 'private, no-store, max-age=0',
+          },
+        })
+      }
+
       // Fetch the actual attachment bytes
       const attRes = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentData.attachmentId}`,
@@ -125,18 +134,20 @@ export async function GET(request: NextRequest) {
 function findAttachmentByCid(
   payload: { parts?: Array<{ filename?: string; mimeType?: string; body?: { attachmentId?: string; data?: string; size?: number | string }; headers?: Array<{ name: string; value: string }>; parts?: unknown[] }> },
   cid: string
-): { attachmentId: string; mimeType: string } | null {
+): { attachmentId?: string; data?: string; mimeType: string } | null {
   const parts = payload.parts
   if (!parts) return null
 
   for (const part of parts) {
-    if (part.body?.attachmentId) {
-      const contentIdHeader = part.headers?.find(
-        (h: { name: string; value: string }) => h.name.toLowerCase() === 'content-id'
-      )
-      const partCid = contentIdHeader?.value?.replace(/<|>/g, '')
-      if (partCid === cid) {
-        return { attachmentId: part.body.attachmentId, mimeType: part.mimeType || 'image/*' }
+    const contentIdHeader = part.headers?.find(
+      (h: { name: string; value: string }) => h.name.toLowerCase() === 'content-id'
+    )
+    const partCid = contentIdHeader?.value?.replace(/<|>/g, '')
+    if (partCid === cid && (part.body?.attachmentId || part.body?.data)) {
+      return {
+        attachmentId: part.body.attachmentId,
+        data: part.body.data,
+        mimeType: part.mimeType || 'image/*',
       }
     }
     if (part.parts) {

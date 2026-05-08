@@ -1,11 +1,13 @@
 'use client'
 
 import { type Editor } from '@tiptap/react'
+import { NodeSelection } from '@tiptap/pm/state'
 import {
   Bold, Italic, Underline, Strikethrough, Code,
   List, ListOrdered, Quote, Minus, Undo, Redo,
   Image, AlignLeft, AlignCenter, AlignRight,
-  ChevronDown, Palette, Highlighter, ArrowLeft, Crop
+  ChevronDown, Palette, Highlighter, ArrowLeft, Crop,
+  Shrink, Expand
 } from 'lucide-react'
 import ReactCrop, { type Crop as CropType, centerCrop, makeAspectCrop } from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
@@ -22,6 +24,93 @@ import {
 
 interface ComposeToolbarProps {
   editor: Editor
+}
+
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
+type ImageAlign = 'left' | 'center' | 'right'
+
+function normalizeImageAlign(value: unknown): ImageAlign {
+  return value === 'center' || value === 'right' ? value : 'left'
+}
+
+function getActiveImageAttrs(editor: Editor): { src?: string; width?: number; height?: number; align: ImageAlign } | null {
+  const node = editor.state.selection instanceof NodeSelection ? editor.state.selection.node : null
+  if (node?.type.name === 'image') {
+    return {
+      src: typeof node.attrs.src === 'string' ? node.attrs.src : undefined,
+      width: toNumber(node.attrs.width),
+      height: toNumber(node.attrs.height),
+      align: normalizeImageAlign(node.attrs.align),
+    }
+  }
+
+  if (!editor.isActive('image')) return null
+
+  const attrs = editor.getAttributes('image')
+  if (!attrs.src) return null
+
+  return {
+    src: typeof attrs.src === 'string' ? attrs.src : undefined,
+    width: toNumber(attrs.width),
+    height: toNumber(attrs.height),
+    align: normalizeImageAlign(attrs.align),
+  }
+}
+
+function resizeSelectedImage(editor: Editor, scale: number) {
+  const attrs = getActiveImageAttrs(editor)
+  if (!attrs) return
+
+  const width = attrs.width ?? 320
+  const height = attrs.height ?? 240
+  const nextWidth = Math.max(80, Math.min(720, Math.round(width * scale)))
+  const nextHeight = Math.max(60, Math.round(height * (nextWidth / width)))
+
+  editor.chain().focus().updateAttributes('image', {
+    width: nextWidth,
+    height: nextHeight,
+  }).run()
+}
+
+function setImageAlign(editor: Editor, align: ImageAlign) {
+  editor.chain().focus().updateAttributes('image', { align }).run()
+
+  requestAnimationFrame(() => {
+    const container = editor.view.dom.querySelector<HTMLElement>(
+      '.ProseMirror-selectednode[data-resize-container]'
+    )
+    if (container) {
+      container.dataset.align = align
+      container.querySelector('img')?.setAttribute('data-align', align)
+    }
+  })
+}
+
+function getImageDimensions(src: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const image = new window.Image()
+    image.onload = () => {
+      const maxWidth = 480
+      const naturalWidth = image.naturalWidth || maxWidth
+      const naturalHeight = image.naturalHeight || maxWidth
+      const scale = naturalWidth > maxWidth ? maxWidth / naturalWidth : 1
+
+      resolve({
+        width: Math.round(naturalWidth * scale),
+        height: Math.round(naturalHeight * scale),
+      })
+    }
+    image.onerror = () => resolve({ width: 320, height: 240 })
+    image.src = src
+  })
 }
 
 // --- Font families ---
@@ -217,7 +306,8 @@ export function ComposeToolbar({ editor }: ComposeToolbarProps) {
   const currentFontSize = editor.getAttributes('textStyle').fontSize as string | undefined
   const currentTextColor = editor.getAttributes('textStyle').color as string | undefined
   const currentHighlightColor = editor.getAttributes('highlight').color as string | undefined
-  const currentTextAlign = editor.getAttributes('paragraph').textAlign as string | undefined
+  const activeImage = getActiveImageAttrs(editor)
+  const currentTextAlign = activeImage?.align ?? (editor.getAttributes('paragraph').textAlign as string | undefined)
 
   function insertLink() {
     if (!linkUrl) return
@@ -235,9 +325,10 @@ export function ComposeToolbar({ editor }: ComposeToolbarProps) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const src = ev.target?.result as string
-      editor.chain().focus().setImage({ src }).run()
+      const { width, height } = await getImageDimensions(src)
+      editor.chain().focus().setImage({ src, width, height }).run()
     }
     reader.readAsDataURL(file)
     e.target.value = ''
@@ -435,21 +526,21 @@ export function ComposeToolbar({ editor }: ComposeToolbarProps) {
 
           {/* Text alignment */}
           <TbBtn
-            onClick={() => editor.chain().focus().setTextAlign('left').run()}
+            onClick={() => activeImage ? setImageAlign(editor, 'left') : editor.chain().focus().setTextAlign('left').run()}
             isActive={currentTextAlign === 'left'}
             title="Align left"
           >
             <AlignLeft className="w-3.5 h-3.5" />
           </TbBtn>
           <TbBtn
-            onClick={() => editor.chain().focus().setTextAlign('center').run()}
+            onClick={() => activeImage ? setImageAlign(editor, 'center') : editor.chain().focus().setTextAlign('center').run()}
             isActive={currentTextAlign === 'center'}
             title="Align center"
           >
             <AlignCenter className="w-3.5 h-3.5" />
           </TbBtn>
           <TbBtn
-            onClick={() => editor.chain().focus().setTextAlign('right').run()}
+            onClick={() => activeImage ? setImageAlign(editor, 'right') : editor.chain().focus().setTextAlign('right').run()}
             isActive={currentTextAlign === 'right'}
             title="Align right"
           >
@@ -516,21 +607,27 @@ export function ComposeToolbar({ editor }: ComposeToolbarProps) {
           </TbBtn>
           <TbBtn
             onClick={() => {
-              // Find the first image node in the document
-              let src: string | undefined
-              editor.state.doc.descendants((node, _pos) => {
-                if (node.type.name === 'image' && !src) {
-                  src = node.attrs.src as string
-                  return false
-                }
-              })
-              if (src) setCropModalSrc(src)
+              if (activeImage?.src) setCropModalSrc(activeImage.src)
             }}
             isActive={false}
-            disabled={!editor.isActive('image')}
+            disabled={!activeImage?.src}
             title="Crop image"
           >
             <Crop className="w-3.5 h-3.5" />
+          </TbBtn>
+          <TbBtn
+            onClick={() => resizeSelectedImage(editor, 0.85)}
+            disabled={!activeImage}
+            title="Shrink image"
+          >
+            <Shrink className="w-3.5 h-3.5" />
+          </TbBtn>
+          <TbBtn
+            onClick={() => resizeSelectedImage(editor, 1.15)}
+            disabled={!activeImage}
+            title="Expand image"
+          >
+            <Expand className="w-3.5 h-3.5" />
           </TbBtn>
 
           {/* Inline link input */}
@@ -630,8 +727,13 @@ export function ComposeToolbar({ editor }: ComposeToolbarProps) {
                   const croppedDataUrl = canvas.toDataURL('image/png')
 
                   // Replace the selected image node with the cropped data URL
-                  if (editor.isActive('image')) {
-                    editor.chain().focus().setImage({ src: croppedDataUrl }).run()
+                  if (getActiveImageAttrs(editor)) {
+                    const { width, height } = await getImageDimensions(croppedDataUrl)
+                    editor.chain().focus().updateAttributes('image', {
+                      src: croppedDataUrl,
+                      width,
+                      height,
+                    }).run()
                   }
 
                   setCropModalSrc(null)
