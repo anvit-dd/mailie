@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse('Missing image URL or CID', { status: 400 })
   }
 
-  // Handle cid: inline attachment — fetch from Gmail Attachments API
+  // ── CID (inline attachment) images ─────────────────────────────────────────
   if (cidParam) {
     const cid = cidParam.replace(/^cid:/, '').replace(/<|>/g, '')
     const messageId = messageIdParam
@@ -38,7 +38,6 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      // Fetch the full message to find the attachment by Content-ID
       const msgRes = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -48,22 +47,24 @@ export async function GET(request: NextRequest) {
       }
       const msg = await msgRes.json()
 
-      // Search through all parts for one with matching Content-ID header
       const attachmentData = findAttachmentByCid(msg.payload, cid)
       if (!attachmentData) {
         return new NextResponse('Attachment not found for CID', { status: 404 })
       }
 
+      // Inline data embedded directly in the message (already decoded)
       if (attachmentData.data) {
-        return new NextResponse(Buffer.from(normalizeBase64Url(attachmentData.data), 'base64'), {
+        const buf = Buffer.from(normalizeBase64Url(attachmentData.data), 'base64')
+        return new NextResponse(buf, {
           headers: {
-            'Content-Type': attachmentData.mimeType || 'image/*',
+            'Content-Type': attachmentData.mimeType || 'application/octet-stream',
+            'Content-Length': String(buf.length),
             'Cache-Control': 'private, no-store, max-age=0',
           },
         })
       }
 
-      // Fetch the actual attachment bytes
+      // Fetch attachment bytes from Gmail Attachments API
       const attRes = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentData.attachmentId}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -77,9 +78,11 @@ export async function GET(request: NextRequest) {
         return new NextResponse('No data in attachment response', { status: 502 })
       }
 
-      return new NextResponse(Buffer.from(base64Data, 'base64'), {
+      const buf = Buffer.from(base64Data, 'base64')
+      return new NextResponse(buf, {
         headers: {
-          'Content-Type': attachmentData.mimeType || 'image/*',
+          'Content-Type': attachmentData.mimeType || 'application/octet-stream',
+          'Content-Length': String(buf.length),
           'Cache-Control': 'private, no-store, max-age=0',
         },
       })
@@ -89,7 +92,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Handle external URL proxy
+  // ── External URL proxy ───────────────────────────────────────────────────────
   let imageUrl: URL
   try {
     imageUrl = new URL(urlParam!)
@@ -103,24 +106,34 @@ export async function GET(request: NextRequest) {
 
   try {
     const response = await fetch(imageUrl.toString(), {
-      headers: {
-        Accept: 'image/*,*/*;q=0.8',
-      },
+      // Don't send Accept header — some servers interpret it and return wrong type.
+      // Let the server send its natural Content-Type.
       redirect: 'follow',
     })
 
-    if (!response.ok || !response.body) {
+    if (!response.ok) {
       return new NextResponse('Failed to fetch image', { status: response.status || 502 })
     }
 
-    const contentType = response.headers.get('content-type') || 'image/*'
-    if (!contentType.startsWith('image/')) {
-      return new NextResponse('Unsupported image type', { status: 415 })
+    // Collect ALL bytes first — streaming a ReadableStream through NextResponse
+    // can cause chunked-encoding issues with binary data in some Next.js configs.
+    const arrayBuffer = await response.arrayBuffer()
+    const buf = Buffer.from(arrayBuffer)
+
+    const rawContentType = response.headers.get('content-type')
+
+    // No Content-Type header: try to detect from magic bytes
+    let contentType: string
+    if (rawContentType) {
+      contentType = normalizeImageContentType(rawContentType) || 'application/octet-stream'
+    } else {
+      contentType = detectMimeFromMagic(buf) || 'application/octet-stream'
     }
 
-    return new NextResponse(response.body, {
+    return new NextResponse(buf, {
       headers: {
         'Content-Type': contentType,
+        'Content-Length': String(buf.length),
         'Cache-Control': 'private, no-store, max-age=0',
       },
     })
@@ -130,9 +143,19 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/** Recursively search message payload parts for attachment matching a Content-ID */
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/** Recursively find an inline attachment part by its Content-ID header. */
 function findAttachmentByCid(
-  payload: { parts?: Array<{ filename?: string; mimeType?: string; body?: { attachmentId?: string; data?: string; size?: number | string }; headers?: Array<{ name: string; value: string }>; parts?: unknown[] }> },
+  payload: {
+    parts?: Array<{
+      filename?: string
+      mimeType?: string
+      body?: { attachmentId?: string; data?: string; size?: number | string }
+      headers?: Array<{ name: string; value: string }>
+      parts?: unknown[]
+    }>
+  },
   cid: string
 ): { attachmentId?: string; data?: string; mimeType: string } | null {
   const parts = payload.parts
@@ -147,19 +170,64 @@ function findAttachmentByCid(
       return {
         attachmentId: part.body.attachmentId,
         data: part.body.data,
-        mimeType: part.mimeType || 'image/*',
+        mimeType: part.mimeType || 'application/octet-stream',
       }
     }
     if (part.parts) {
-      const nested = findAttachmentByCid(part as { parts?: Array<{ filename?: string; mimeType?: string; body?: { attachmentId?: string; data?: string; size?: number | string }; headers?: Array<{ name: string; value: string }>; parts?: unknown[] }> }, cid)
+      const nested = findAttachmentByCid(
+        part as {
+          parts?: Array<{
+            filename?: string
+            mimeType?: string
+            body?: { attachmentId?: string; data?: string; size?: number | string }
+            headers?: Array<{ name: string; value: string }>
+            parts?: unknown[]
+          }>
+        },
+        cid
+      )
       if (nested) return nested
     }
   }
   return null
 }
 
+/** Magic-byte signatures for common image formats. */
+function detectMimeFromMagic(buf: Buffer): string | null {
+  if (buf.length < 4) return null
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png'
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg'
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return 'image/gif'
+  if (buf[0] === 0x57 && buf[1] === 0x45 && buf[2] === 0x42 && buf[3] === 0x50) return 'image/webp'
+  if (buf[0] === 0x42 && buf[1] === 0x4d) return 'image/bmp'
+  if (buf[0] === 0x49 && buf[1] === 0x49 && buf[2] === 0x2a && buf[3] === 0x00) return 'image/tiff'
+  if (buf[0] === 0x4d && buf[1] === 0x4d && buf[2] === 0x00 && buf[3] === 0x2a) return 'image/tiff'
+  if (buf[0] === 0x00 && buf[1] === 0x00 && buf[2] === 0x01 && buf[3] === 0x00) return 'image/x-icon'
+  return null
+}
+
+/** Normalize a raw Content-Type header to a known image MIME string, or null. */
+function normalizeImageContentType(raw: string): string | null {
+  const ct = raw.toLowerCase()
+  const KNOWN: Record<string, string> = {
+    'image/apng': 'image/apng',
+    'image/avif': 'image/avif',
+    'image/gif': 'image/gif',
+    'image/jpeg': 'image/jpeg',
+    'image/png': 'image/png',
+    'image/svg+xml': 'image/svg+xml',
+    'image/webp': 'image/webp',
+    'image/bmp': 'image/bmp',
+    'image/tiff': 'image/tiff',
+    'image/x-icon': 'image/x-icon',
+  }
+  if (KNOWN[ct]) return KNOWN[ct]
+  if (ct.startsWith('image/')) return ct // pass through unknown image/* types
+  return null
+}
+
 function normalizeBase64Url(data: string | undefined): string {
   if (!data) return ''
   const base64 = data.replace(/-/g, '+').replace(/_/g, '/')
-  return base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, '=')
+  return base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
 }

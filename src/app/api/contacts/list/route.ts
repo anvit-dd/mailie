@@ -35,6 +35,24 @@ export async function GET(request: NextRequest) {
   const maxPages = 3  // 3 pages × 100 = 300 messages; plenty for autocomplete
   const messagesPerPage = 100
 
+  const TIMEOUT_MS = 8000 // per-page Gmail API timeout
+
+  async function fetchWithTimeout(url: string, token: string): Promise<Response | null> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      })
+      clearTimeout(timer)
+      return res
+    } catch {
+      clearTimeout(timer)
+      return null
+    }
+  }
+
   try {
     for (let page = 0; page < maxPages; page++) {
       const params = new URLSearchParams({
@@ -43,11 +61,11 @@ export async function GET(request: NextRequest) {
       })
       if (pageToken) params.set('pageToken', pageToken)
 
-      const listRes = await fetch(
+      const listRes = await fetchWithTimeout(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
+        accessToken
       )
-      if (!listRes.ok) break
+      if (!listRes?.ok) break
 
       const listData = await listRes.json() as {
         messages?: Array<{ id: string }>
@@ -57,18 +75,15 @@ export async function GET(request: NextRequest) {
 
       const ids = listData.messages.map((m) => m.id)
 
-      // Parallel fetch headers for all messages on this page
+      // Fetch headers sequentially to avoid burst rate-limiting
       const METADATA_HEADERS = 'From,To,Cc,Bcc'
-      const results = await Promise.all(
-        ids.map((id) =>
-          fetch(
-            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=${METADATA_HEADERS}`,
-            { headers: { Authorization: `Bearer ${accessToken}` } }
-          ).then((r) => r.json().catch(() => null))
+      for (const id of ids) {
+        const metaRes = await fetchWithTimeout(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=${METADATA_HEADERS}`,
+          accessToken
         )
-      )
-
-      for (const msg of results) {
+        if (!metaRes) continue
+        const msg = await metaRes.json().catch(() => null)
         if (!msg?.payload?.headers) continue
         const headers = msg.payload.headers as Array<{ name: string; value: string }>
         const from = extractEmails(headers.find((h) => h.name.toLowerCase() === 'from')?.value)

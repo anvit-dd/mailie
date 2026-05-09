@@ -237,6 +237,7 @@ function shouldRenderAsPlainText(html: string, apiPlainText: boolean): boolean {
 function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: EmailDetail; noPadding?: boolean }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const requestIdRef = useRef(0)
   const [emailHtml, setEmailHtml] = useState<string | null>(null)
   const [isPlainTextHtml, setIsPlainTextHtml] = useState(false)
   const [plainTextBody, setPlainTextBody] = useState('')
@@ -256,7 +257,13 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
 
   // Fetch email body HTML when a new email is selected
   useEffect(() => {
+    const currentRequestId = ++requestIdRef.current
+
     const controller = new AbortController()
+
+    setIsLoading(true)
+    setEmailHtml(null)
+    setError(null)
 
     fetch(`/api/gmail/body?id=${selectedEmail.id}`, {
       signal: controller.signal,
@@ -266,6 +273,8 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
         return res.json()
       })
       .then((data) => {
+        // Ignore stale responses from older in-flight requests
+        if (currentRequestId !== requestIdRef.current) return
         const html = String(data.html || '')
         const plainText = shouldRenderAsPlainText(html, Boolean(data.plainText))
         setIsPlainTextHtml(plainText)
@@ -275,6 +284,7 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
       })
       .catch((err) => {
         if (err instanceof Error && err.name === 'AbortError') return
+        if (currentRequestId !== requestIdRef.current) return
         setError(err instanceof Error ? err.message : 'Failed to load email')
         setIsLoading(false)
       })
@@ -409,5 +419,5 @@ export function MessageBody({ noPadding }: { noPadding?: boolean }) {
     )
   }
 
-  return <MessageBodyContent key={selectedEmail.id} selectedEmail={selectedEmail} noPadding={noPadding} />
+  return <MessageBodyContent selectedEmail={selectedEmail} noPadding={noPadding} />
 }

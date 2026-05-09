@@ -67,13 +67,21 @@ export function ContactAutocomplete({
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
-  const localContacts = useState<Contact[]>(() => loadLocalContacts())[0]
+
+  // Load local contacts from localStorage on mount — useEffect ensures we re-read
+  // whenever contacts are saved (e.g. after sending an email closes and reopens compose)
+  const [localContacts, setLocalContacts] = useState<Contact[]>([])
 
   // Fetch Gmail contacts when provider is gmail
   const [gmailContacts, setGmailContacts] = useState<Contact[]>([])
 
   // Stable excludeEmails set for the filter effect
   const excludeSet = useMemo(() => new Set(excludeEmails.map((e) => e.toLowerCase())), [excludeEmails])
+
+  // Re-read localStorage on mount (handles contacts saved in a previous compose session)
+  useEffect(() => {
+    setLocalContacts(loadLocalContacts())
+  }, [])
 
   // Compute all contacts (local + Gmail, deduplicated) — stable reference
   const allContacts = useMemo(() => {
@@ -91,14 +99,19 @@ export function ContactAutocomplete({
 
     async function fetchGmailContacts() {
       try {
-        const res = await fetch('/api/contacts/list', { credentials: 'include' })
-        if (!res.ok) return
+        const res = await fetch('/api/contacts/list', {
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          console.error('[contacts] Gmail API returned', res.status)
+          return
+        }
         const data = await res.json() as { contacts?: Array<{ name?: string; email: string }> }
         if (data.contacts) {
           setGmailContacts(data.contacts.map((c) => ({ name: c.name || '', email: c.email })))
         }
-      } catch {
-        // Non-fatal
+      } catch (err) {
+        console.error('[contacts] failed to load Gmail contacts:', err)
       }
     }
 

@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
+import { randomBytes } from 'crypto'
 import { getGmailClientId, getGmailRedirectUri } from '@/lib/gmail-config'
 
 export async function GET() {
+  const state = randomBytes(16).toString('hex')
+
   let clientId: string
   let redirectUri: string
 
@@ -16,6 +19,7 @@ export async function GET() {
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
+    state,
     scope: [
       'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/gmail.send',
@@ -28,5 +32,13 @@ export async function GET() {
     prompt: 'consent',
   })
 
-  return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
+  const response = NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
+  response.cookies.set('oauth_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 60 * 10, // 10 minutes
+    path: '/',
+  })
+  return response
 }

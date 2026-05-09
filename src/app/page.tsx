@@ -427,7 +427,27 @@ export default function Home() {
     document.body.style.userSelect = 'none'
   }
 
-  // ── Auth-gated useEffect — must stay in hooks order (before early returns) ──
+  // ── Drag resize email list ──────────────────────────────────────
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!isDragging.current) return
+      const delta = e.clientX - dragStartX.current
+      const next = Math.max(MIN_LIST_WIDTH, Math.min(MAX_LIST_WIDTH, dragStartWidth.current + delta))
+      setListWidth(next)
+    }
+    function onMouseUp() {
+      if (!isDragging.current) return
+      isDragging.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, []) // stable — all mutation via refs
   useEffect(() => {
     if (isAuthenticated && provider === 'gmail') {
       void loadGmailUnreadCounts()

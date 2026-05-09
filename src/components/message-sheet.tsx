@@ -40,7 +40,7 @@ export function MessageSheet({ onReply, onForward }: MessageSheetProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 shrink-0"
+            className="size-9 shrink-0"
             onClick={() => setSelectedEmail(null)}
           >
             <ChevronLeft className="w-5 h-5" />

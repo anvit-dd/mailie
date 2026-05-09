@@ -2,17 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrCreateAccount, createSession } from '@/lib/session'
 import { getAppUrl, getGmailClientId, getGmailClientSecret, getGmailRedirectUri } from '@/lib/gmail-config'
 
+// GET: receives OAuth redirect from Google, validates state, exchanges code for tokens
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
+  const state = searchParams.get('state')
   const error = searchParams.get('error')
   const appUrl = getAppUrl()
 
-  console.log('[OAuth callback] URL:', request.url, '| code:', code, '| error:', error)
+  console.log('[OAuth callback] URL:', request.url, '| code:', code, '| state:', state, '| error:', error)
 
   if (error || !code) {
     console.log('[OAuth callback] Missing code or error present — error:', error, 'code:', code)
     return NextResponse.redirect(`${appUrl}/?error=${error || 'no_code'}`)
+  }
+
+  // Validate state to prevent CSRF
+  const expectedState = request.cookies.get('oauth_state')?.value
+  if (!state || state !== expectedState) {
+    console.warn('[OAuth callback] State mismatch — expected:', expectedState, 'got:', state)
+    return NextResponse.redirect(`${appUrl}/?error=invalid_state`)
   }
 
   try {
@@ -42,7 +51,7 @@ export async function GET(request: NextRequest) {
     try {
       const peopleResponse = await fetch(
         'https://people.googleapis.com/v1/people/me?personFields=photos,names',
-        { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+        { headers: { Authorization: `Bearer ${tokens.access_token}` }, next: { revalidate: 3600 } }
       )
       if (peopleResponse.ok) {
         const people = await peopleResponse.json()
@@ -77,8 +86,9 @@ export async function GET(request: NextRequest) {
     // Create session
     const session = createSession(account.id)
 
-    // Set session cookie and redirect
+    // Set session cookie and redirect (clear oauth_state cookie)
     const response = NextResponse.redirect(`${appUrl}/`)
+    response.cookies.delete('oauth_state')
     response.cookies.set('session', session.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -92,4 +102,8 @@ export async function GET(request: NextRequest) {
     console.error('OAuth callback error:', err)
     return NextResponse.redirect(`${appUrl}/?error=auth_failed`)
   }
+}
+
+export async function POST() {
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
 }

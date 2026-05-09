@@ -67,7 +67,7 @@ export function MobileNav({ onCompose, onSettingsOpen }: MobileNavProps) {
         render={
           <button
             type="button"
-            className="md:hidden inline-flex items-center justify-center rounded-lg cursor-pointer h-9 w-9 shrink-0 text-[var(--foreground)] hover:bg-[var(--surface-elevated)] transition-colors"
+            className="md:hidden inline-flex items-center justify-center rounded-lg cursor-pointer size-9 shrink-0 text-[var(--foreground)] hover:bg-[var(--surface-elevated)] transition-colors"
           />
         }
       >
