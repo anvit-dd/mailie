@@ -3,8 +3,12 @@
 import type { MailProvider, ListMessagesParams, ListMessagesResult, EmailDetail, SendMessageParams, MailFolder, Email } from '../mail-provider'
 
 function parseImapMessageId(id: string): { mailbox: string; uid: string } {
-  const [mailbox, uid] = id.replace('imap:', '').split(':')
-  return { mailbox, uid }
+  const value = id.replace('imap:', '')
+  const separatorIndex = value.lastIndexOf(':')
+  return {
+    mailbox: separatorIndex === -1 ? 'INBOX' : value.slice(0, separatorIndex),
+    uid: separatorIndex === -1 ? value : value.slice(separatorIndex + 1),
+  }
 }
 
 export class ImapSmtpProvider implements MailProvider {

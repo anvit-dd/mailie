@@ -605,7 +605,7 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
 
         {/* Subject */}
         <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--border)]">
-          <span className="w-6 font-mono text-[11px] text-muted-foreground shrink-0">Sub:</span>
+          <span className="w-8 font-mono text-[11px] text-muted-foreground shrink-0">Sub:</span>
           <input
             type="text"
             value={subject}
@@ -819,7 +819,7 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
 
           {/* Subject */}
           <div className="flex items-center gap-2 border-b border-border px-4 py-2">
-            <span className="w-10 font-mono text-sm text-muted-foreground">Sub:</span>
+            <span className="w-12 font-mono text-sm text-muted-foreground shrink-0">Sub:</span>
             <input
               type="text"
               value={subject}

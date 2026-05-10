@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession, getAccountWithTokens } from '@/lib/session'
+import { encryptToken, getSession, getAccountWithTokens } from '@/lib/session'
 import { db } from '@/lib/db'
 import { getGmailClientId, getGmailClientSecret } from '@/lib/gmail-config'
 
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     // Update stored tokens
     db.prepare(`
       UPDATE gmail_tokens SET access_token = ?, expires_at = ?, updated_at = ? WHERE account_id = ?
-    `).run(tokens.access_token, newExpiresAt, Date.now(), account.id)
+    `).run(encryptToken(tokens.access_token), newExpiresAt, Date.now(), account.id)
 
     return NextResponse.json({ access_token: tokens.access_token, expires_at: newExpiresAt })
   } catch (err) {

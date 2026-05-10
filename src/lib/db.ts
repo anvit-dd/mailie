@@ -81,9 +81,9 @@ try {
   db.exec(`ALTER TABLE mail_credentials ADD COLUMN imap_password_encrypted TEXT`)
   db.exec(`UPDATE mail_credentials SET imap_password_encrypted = imap_password_encrypted_temp`)
   db.exec(`ALTER TABLE mail_credentials DROP COLUMN imap_password_encrypted_temp`)
-} catch (e: any) {
+} catch (e: unknown) {
   // Some step failed — likely already migrated or fresh DB, safe to ignore
-  if (!e.message.includes('duplicate column')) {
+  if (e instanceof Error && !e.message.includes('duplicate column')) {
     // only re-throw if it's not the "column already exists" kind of error
   }
 }

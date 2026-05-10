@@ -10,6 +10,14 @@ import { createSession } from '@/lib/session'
 import { verifySmtpConnection, verifyImapConnection } from '@/lib/smtp'
 import { randomBytes } from 'crypto'
 
+function parsePort(value: string, fieldName: string): { port: number } | { error: string } {
+  const port = Number(value)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { error: `${fieldName} must be a valid TCP port` }
+  }
+  return { port }
+}
+
 export async function POST(request: NextRequest) {
   let body: {
     email: string
@@ -33,47 +41,81 @@ export async function POST(request: NextRequest) {
   }
 
   const {
-    email,
-    displayName,
-    smtpHost,
-    smtpPort,
+    email: rawEmail,
+    displayName: rawDisplayName,
+    smtpHost: rawSmtpHost,
+    smtpPort: rawSmtpPort,
     smtpSecure,
-    smtpUsername,
-    smtpPassword,
-    imapHost,
-    imapPort,
+    smtpUsername: rawSmtpUsername,
+    smtpPassword: rawSmtpPassword,
+    imapHost: rawImapHost,
+    imapPort: rawImapPort,
     imapSecure,
-    imapUsername,
-    imapPassword,
+    imapUsername: rawImapUsername,
+    imapPassword: rawImapPassword,
   } = body
 
-  if (!email || !smtpPassword) {
-    return NextResponse.json({ error: 'Email and SMTP password are required' }, { status: 400 })
+  const email = rawEmail?.trim().toLowerCase()
+  const displayName = rawDisplayName?.trim()
+  const smtpHost = rawSmtpHost?.trim()
+  const smtpPort = rawSmtpPort?.trim()
+  const smtpPassword = rawSmtpPassword ?? ''
+  const imapHost = rawImapHost?.trim()
+  const imapPort = rawImapPort?.trim()
+  const smtpUsername = rawSmtpUsername?.trim()
+  const imapUsername = rawImapUsername?.trim()
+  const hasSmtpConfig = Boolean(smtpHost || smtpPort || smtpUsername || smtpPassword)
+  const hasImapConfig = Boolean(imapHost || imapPort || imapUsername || rawImapPassword)
+  const imapPassword = hasImapConfig ? (rawImapPassword || smtpPassword) : ''
+
+  if (!email) {
+    return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+  }
+  if (!hasSmtpConfig && !hasImapConfig) {
+    return NextResponse.json({ error: 'Add SMTP, IMAP, or both server settings' }, { status: 400 })
+  }
+  if (hasSmtpConfig && (!smtpHost || !smtpPort || !smtpPassword)) {
+    return NextResponse.json({ error: 'SMTP host, port, and password are required when SMTP is configured' }, { status: 400 })
+  }
+  if (hasImapConfig && (!imapHost || !imapPort || !imapPassword)) {
+    return NextResponse.json({ error: 'IMAP host, port, and password are required when IMAP is configured' }, { status: 400 })
+  }
+
+  const parsedSmtpPort = hasSmtpConfig ? parsePort(smtpPort, 'SMTP port') : { port: 0 }
+  if ('error' in parsedSmtpPort) {
+    return NextResponse.json({ error: parsedSmtpPort.error }, { status: 400 })
+  }
+  const parsedImapPort = hasImapConfig ? parsePort(imapPort, 'IMAP port') : { port: 0 }
+  if ('error' in parsedImapPort) {
+    return NextResponse.json({ error: parsedImapPort.error }, { status: 400 })
   }
 
   // For Resend SMTP, the username is always "resend" regardless of email
-  const isResend = smtpHost.toLowerCase() === 'smtp.resend.com'
+  const isResend = smtpHost?.toLowerCase() === 'smtp.resend.com'
   const resolvedSmtpUsername = isResend ? 'resend' : (smtpUsername || email)
+  const resolvedImapUsername = imapUsername || smtpUsername || email
 
   // 1. Verify SMTP
-  const smtpResult = await verifySmtpConnection(
-    smtpHost,
-    parseInt(smtpPort, 10),
-    smtpSecure,
-    resolvedSmtpUsername,
-    smtpPassword,
-  )
-  if (!smtpResult.success) {
-    return NextResponse.json({ error: `SMTP: ${smtpResult.error}` }, { status: 400 })
+  if (hasSmtpConfig) {
+    const smtpResult = await verifySmtpConnection(
+      smtpHost,
+      parsedSmtpPort.port,
+      smtpSecure,
+      resolvedSmtpUsername,
+      smtpPassword,
+    )
+    if (!smtpResult.success) {
+      return NextResponse.json({ error: `SMTP: ${smtpResult.error}` }, { status: 400 })
+    }
   }
 
-  // 2. Verify IMAP only if provided (optional)
-  if (imapHost && imapPassword) {
+  // 2. Verify IMAP when configured.
+  if (hasImapConfig) {
     const result = await verifyImapConnection(
       imapHost,
-      parseInt(imapPort, 10),
+      parsedImapPort.port,
       imapSecure,
-      imapUsername || email,
+      resolvedImapUsername,
       imapPassword,
     )
     if (!result.success) {
@@ -85,8 +127,8 @@ export async function POST(request: NextRequest) {
   let smtpEncrypted: string
   let imapEncrypted: string | undefined
   try {
-    smtpEncrypted = encrypt(smtpPassword)
-    if (imapPassword) {
+    smtpEncrypted = hasSmtpConfig ? encrypt(smtpPassword) : ''
+    if (hasImapConfig) {
       imapEncrypted = encrypt(imapPassword)
     }
   } catch {
@@ -122,10 +164,10 @@ export async function POST(request: NextRequest) {
         updated_at = excluded.updated_at
     `).run(
       accountId, email, displayName || null,
-      smtpHost, parseInt(smtpPort, 10), smtpSecure ? 1 : 0,
-      resolvedSmtpUsername, smtpEncrypted,
-      imapHost || '', imapPort ? parseInt(imapPort, 10) : 0, imapSecure ? 1 : 0,
-      imapUsername || '', imapEncrypted ?? '',
+      smtpHost || '', parsedSmtpPort.port, smtpSecure ? 1 : 0,
+      hasSmtpConfig ? resolvedSmtpUsername : '', smtpEncrypted,
+      imapHost || '', parsedImapPort.port, imapSecure ? 1 : 0,
+      hasImapConfig ? resolvedImapUsername : '', imapEncrypted ?? '',
       now, now,
     )
   } else {
@@ -143,10 +185,10 @@ export async function POST(request: NextRequest) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       accountId, email, displayName || null,
-      smtpHost, parseInt(smtpPort, 10), smtpSecure ? 1 : 0,
-      resolvedSmtpUsername, smtpEncrypted,
-      imapHost || '', imapPort ? parseInt(imapPort, 10) : 0, imapSecure ? 1 : 0,
-      imapUsername || '', imapEncrypted ?? '',
+      smtpHost || '', parsedSmtpPort.port, smtpSecure ? 1 : 0,
+      hasSmtpConfig ? resolvedSmtpUsername : '', smtpEncrypted,
+      imapHost || '', parsedImapPort.port, imapSecure ? 1 : 0,
+      hasImapConfig ? resolvedImapUsername : '', imapEncrypted ?? '',
       now, now,
     )
   }

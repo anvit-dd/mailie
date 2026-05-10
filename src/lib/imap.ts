@@ -54,6 +54,17 @@ export interface ImapMessageDetail extends ImapMessageSummary {
 // Connection helpers
 // ─────────────────────────────────────────────────────────
 
+type ImapOptions = ConstructorParameters<typeof ImapFlow>[0]
+type CachedImapClient = {
+  client: ImapFlow
+  optionsKey: string
+  lastUsed: number
+  queue: Promise<unknown>
+}
+
+const IMAP_IDLE_TIMEOUT_MS = 2 * 60 * 1000
+const imapClientCache = new Map<string, CachedImapClient>()
+
 function getImapCredentials(accountId: string) {
   const row = db.prepare(`
     SELECT imap_host, imap_port, imap_secure, imap_username, imap_password_encrypted
@@ -63,10 +74,13 @@ function getImapCredentials(accountId: string) {
     imap_port: number
     imap_secure: number
     imap_username: string
-    imap_password_encrypted: string
+    imap_password_encrypted: string | null
   } | undefined
 
   if (!row) throw new Error('No IMAP credentials found for this account')
+  if (!row.imap_host || !row.imap_port || !row.imap_username || !row.imap_password_encrypted) {
+    throw new Error('Incomplete IMAP credentials for this account')
+  }
 
   let password: string
   try {
@@ -79,9 +93,11 @@ function getImapCredentials(accountId: string) {
     host: row.imap_host,
     port: row.imap_port,
     secure: row.imap_secure === 1,
-    user: row.imap_username,
-    pass: password,
-  }
+    auth: {
+      user: row.imap_username,
+      pass: password,
+    },
+  } satisfies ImapOptions
 }
 
 async function withImap<T>(
@@ -89,13 +105,49 @@ async function withImap<T>(
   fn: (client: ImapFlow) => Promise<T>,
 ): Promise<T> {
   const opts = getImapCredentials(accountId)
-  const client = new ImapFlow({ ...opts, logger: false })
-  await client.connect()
-  try {
-    return await fn(client)
-  } finally {
-    await client.logout()
+  const optionsKey = JSON.stringify({
+    host: opts.host,
+    port: opts.port,
+    secure: opts.secure,
+    user: opts.auth?.user,
+  })
+  const now = Date.now()
+  const cached = imapClientCache.get(accountId)
+  let entry = cached
+
+  if (entry && (entry.optionsKey !== optionsKey || now - entry.lastUsed > IMAP_IDLE_TIMEOUT_MS)) {
+    imapClientCache.delete(accountId)
+    await entry.queue.catch(() => undefined)
+    await entry.client.logout().catch(() => undefined)
+    entry = undefined
   }
+
+  if (!entry) {
+    const client = new ImapFlow({ ...opts, logger: false })
+    await client.connect()
+    entry = { client, optionsKey, lastUsed: now, queue: Promise.resolve() }
+    imapClientCache.set(accountId, entry)
+  }
+
+  const run = entry.queue
+    .catch(() => undefined)
+    .then(async () => {
+      try {
+        entry.lastUsed = Date.now()
+        return await fn(entry.client)
+      } catch (error) {
+        imapClientCache.delete(accountId)
+        await entry.client.logout().catch(() => undefined)
+        throw error
+      }
+    })
+
+  entry.queue = run.catch(() => undefined)
+  return run
+}
+
+async function openMailbox(client: ImapFlow, folder: string) {
+  await client.mailboxOpen(folder)
 }
 
 // ─────────────────────────────────────────────────────────
@@ -136,10 +188,13 @@ export async function searchMessages(
       if (k !== 'all') searchCriteria[k] = v
     }
 
-    const uids = await client.search(searchCriteria, { uid: true })
+    const uids = await client.search(
+      Object.keys(searchCriteria).length > 0 ? searchCriteria : { all: true },
+      { uid: true }
+    )
     if (!uids || uids.length === 0) return { messages: [], total }
 
-    const page = uids.slice(offset, offset + limit)
+    const page = uids.slice().reverse().slice(offset, offset + limit)
     if (page.length === 0) return { messages: [], total }
 
     const pageStr = page.join(',')
@@ -171,6 +226,12 @@ export async function searchMessages(
         size: item.size ?? 0,
       })
     }
+
+    results.sort((a, b) => {
+      const dateDiff = b.date.getTime() - a.date.getTime()
+      if (dateDiff !== 0) return dateDiff
+      return Number(b.uid) - Number(a.uid)
+    })
 
     return { messages: results, total }
   })
@@ -208,6 +269,7 @@ export async function fetchMessage(
   uid: string,
 ): Promise<ImapMessageDetail> {
   return withImap(accountId, async (client) => {
+    await openMailbox(client, folder)
     const raw = await client.fetchOne(uid, {
       uid: true,
       flags: true,
@@ -282,6 +344,7 @@ export async function trashMessage(
   uid: string,
 ): Promise<void> {
   return withImap(accountId, async (client) => {
+    await openMailbox(client, folder)
     for (const trash of TRASH_CANDIDATES) {
       try {
         const ok = await client.messageMove(uid, trash, { uid: true })
@@ -300,6 +363,7 @@ export async function archiveMessage(
   uid: string,
 ): Promise<void> {
   return withImap(accountId, async (client) => {
+    await openMailbox(client, folder)
     for (const archive of ARCHIVE_CANDIDATES) {
       try {
         const ok = await client.messageMove(uid, archive, { uid: true })
@@ -318,10 +382,27 @@ export async function setSeen(
   seen: boolean,
 ): Promise<void> {
   return withImap(accountId, async (client) => {
+    await openMailbox(client, folder)
     if (seen) {
       await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
     } else {
       await client.messageFlagsRemove(uid, ['\\Seen'], { uid: true })
+    }
+  })
+}
+
+export async function setFlagged(
+  accountId: string,
+  folder: string,
+  uid: string,
+  flagged: boolean,
+): Promise<void> {
+  return withImap(accountId, async (client) => {
+    await openMailbox(client, folder)
+    if (flagged) {
+      await client.messageFlagsAdd(uid, ['\\Flagged'], { uid: true })
+    } else {
+      await client.messageFlagsRemove(uid, ['\\Flagged'], { uid: true })
     }
   })
 }
@@ -333,6 +414,7 @@ export async function moveMessage(
   destinationFolder: string,
 ): Promise<void> {
   return withImap(accountId, async (client) => {
+    await openMailbox(client, sourceFolder)
     const ok = await client.messageMove(uid, destinationFolder, { uid: true })
     if (!ok) throw new Error(`Failed to move message ${uid} to ${destinationFolder}`)
   })

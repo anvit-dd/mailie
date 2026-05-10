@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
-import { setSeen } from '@/lib/imap'
+import { setFlagged, setSeen } from '@/lib/imap'
 import { db } from '@/lib/db'
 
 export async function POST(
@@ -26,7 +26,7 @@ export async function POST(
     return NextResponse.json({ error: 'Not an SMTP/IMAP account' }, { status: 403 })
   }
 
-  let body: { folder: string; add?: string[]; remove?: string[]; seen?: boolean }
+  let body: { folder: string; add?: string[]; remove?: string[]; seen?: boolean; flagged?: boolean }
   try {
     body = await request.json()
   } catch {
@@ -40,6 +40,16 @@ export async function POST(
   if (body.seen !== undefined) {
     try {
       await setSeen(session.account_id, folder, uid, body.seen)
+      return NextResponse.json({ ok: true })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return NextResponse.json({ error: msg }, { status: 502 })
+    }
+  }
+
+  if (body.flagged !== undefined) {
+    try {
+      await setFlagged(session.account_id, folder, uid, body.flagged)
       return NextResponse.json({ ok: true })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)

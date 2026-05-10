@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from 'react'
 import type { EmailDetail } from '@/types/email'
+import { useAuth } from './auth-context'
+import { toast } from 'sonner'
 
 interface ReplyTo {
   to: string
@@ -33,17 +35,26 @@ interface ComposeContextValue {
 const ComposeContext = createContext<ComposeContextValue | null>(null)
 
 export function ComposeProvider({ children }: { children: ReactNode }) {
+  const { provider, account } = useAuth()
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [replyTo, setReplyTo] = useState<ReplyTo | undefined>()
   const [composeNonce, setComposeNonce] = useState(0)
 
   const handleCompose = useCallback(() => {
+    if (provider === 'smtp_imap' && !account?.capabilities.smtp) {
+      toast.error('SMTP is not configured for this account')
+      return
+    }
     setReplyTo(undefined)
     setComposeNonce((n) => n + 1)
     setIsComposeOpen(true)
-  }, [])
+  }, [provider, account?.capabilities.smtp])
 
   const handleReply = useCallback((email: EmailDetail) => {
+    if (provider === 'smtp_imap' && !account?.capabilities.smtp) {
+      toast.error('SMTP is not configured for this account')
+      return
+    }
     setReplyTo({
       to: email.from.email,
       subject: email.subject.startsWith('Re:')
@@ -59,13 +70,17 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     })
     setComposeNonce((n) => n + 1)
     setIsComposeOpen(true)
-  }, [])
+  }, [provider, account?.capabilities.smtp])
 
   const handleForward = useCallback(() => {
+    if (provider === 'smtp_imap' && !account?.capabilities.smtp) {
+      toast.error('SMTP is not configured for this account')
+      return
+    }
     setReplyTo(undefined)
     setComposeNonce((n) => n + 1)
     setIsComposeOpen(true)
-  }, [])
+  }, [provider, account?.capabilities.smtp])
 
   return (
     <ComposeContext.Provider

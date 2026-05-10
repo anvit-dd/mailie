@@ -309,6 +309,13 @@ export function Sidebar({ onSettingsOpen }: SidebarProps) {
 
       {/* Folders */}
       <ScrollArea className="flex-1 py-2">
+        {provider === 'smtp_imap' && (
+          <div className="px-4 py-1">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted-foreground)]">
+              Folders
+            </span>
+          </div>
+        )}
         <nav className="flex flex-col gap-0.5 px-2">
           {folders.map((folder) => {
             const Icon = iconMap[folder.icon] || Inbox
@@ -482,16 +489,6 @@ export function Sidebar({ onSettingsOpen }: SidebarProps) {
                 )
               })}
             </nav>
-          </div>
-        )}
-
-        {provider === 'smtp_imap' && (
-          <div className="pb-2">
-            <div className="px-4 py-1">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted-foreground)]">
-                Folders
-              </span>
-            </div>
           </div>
         )}
       </ScrollArea>

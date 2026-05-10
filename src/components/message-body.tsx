@@ -259,19 +259,39 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
   useEffect(() => {
     const currentRequestId = ++requestIdRef.current
 
-    const controller = new AbortController()
-
     const loadingTimer = setTimeout(() => {
       setIsLoading(true)
       setEmailHtml(null)
       setError(null)
     }, 0)
 
+    if (selectedEmail.id.startsWith('imap:')) {
+      const timer = setTimeout(() => {
+        if (currentRequestId !== requestIdRef.current) return
+        const html = selectedEmail.body || ''
+        const plainText = shouldRenderAsPlainText(html, !selectedEmail.body && Boolean(selectedEmail.bodyPlain))
+        setIsPlainTextHtml(plainText)
+        setPlainTextBody(plainText ? htmlToPlainText(html) || selectedEmail.bodyPlain : selectedEmail.bodyPlain)
+        setEmailHtml(html)
+        setIsLoading(false)
+      }, 0)
+
+      return () => {
+        clearTimeout(loadingTimer)
+        clearTimeout(timer)
+      }
+    }
+
+    const controller = new AbortController()
+
     fetch(`/api/gmail/body?id=${selectedEmail.id}`, {
       signal: controller.signal,
     })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to load email')
+      .then(async (res) => {
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({})) as { error?: string }
+          throw new Error(error.error || 'Failed to load email')
+        }
         return res.json()
       })
       .then((data) => {
@@ -295,7 +315,7 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
       clearTimeout(loadingTimer)
       controller.abort()
     }
-  }, [selectedEmail.id])
+  }, [selectedEmail.id, selectedEmail.body, selectedEmail.bodyPlain])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

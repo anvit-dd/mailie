@@ -44,11 +44,13 @@ export interface SendEmailOptions {
 // Credentials
 // ─────────────────────────────────────────────────────────
 
-function getSmtpCredentials(accountId: string, fromAddress: string, fromName?: string): SmtpCredentials {
+function getSmtpCredentials(accountId: string): SmtpCredentials {
   const row = db.prepare(`
-    SELECT smtp_host, smtp_port, smtp_secure, smtp_username, smtp_password_encrypted
+    SELECT email, display_name, smtp_host, smtp_port, smtp_secure, smtp_username, smtp_password_encrypted
     FROM mail_credentials WHERE account_id = ?
   `).get(accountId) as {
+    email: string
+    display_name: string | null
     smtp_host: string
     smtp_port: number
     smtp_secure: number
@@ -57,6 +59,9 @@ function getSmtpCredentials(accountId: string, fromAddress: string, fromName?: s
   } | undefined
 
   if (!row) throw new Error('No SMTP credentials found for this account')
+  if (!row.smtp_host || !row.smtp_port || !row.smtp_username || !row.smtp_password_encrypted) {
+    throw new Error('Incomplete SMTP credentials for this account')
+  }
 
   let password: string
   try {
@@ -71,8 +76,8 @@ function getSmtpCredentials(accountId: string, fromAddress: string, fromName?: s
     smtpSecure: row.smtp_secure === 1,
     smtpUsername: row.smtp_username,
     smtpPassword: password,
-    fromAddress,
-    fromName,
+    fromAddress: row.email,
+    fromName: row.display_name ?? undefined,
   }
 }
 
@@ -84,7 +89,7 @@ export async function sendEmail(
   accountId: string,
   opts: SendEmailOptions,
 ): Promise<{ messageId: string }> {
-  const creds = getSmtpCredentials(accountId, opts.to.split(',')[0].trim())
+  const creds = getSmtpCredentials(accountId)
 
   const transporter = nodemailer.createTransport({
     host: creds.smtpHost,

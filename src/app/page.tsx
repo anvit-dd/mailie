@@ -46,11 +46,13 @@ type ProviderPreset =
 interface SmtpImapForm {
   email: string
   displayName: string
+  useSmtp: boolean
   smtpHost: string
   smtpPort: string
   smtpSecure: boolean
   smtpUsername: string
   smtpPassword: string
+  useImap: boolean
   imapHost: string
   imapPort: string
   imapSecure: boolean
@@ -141,6 +143,7 @@ function AuthScreen({
   onGmailLogin,
   smtpForm,
   setSmtpForm,
+  selectedPreset,
   onPresetChange,
   onConnect,
   isConnecting,
@@ -149,27 +152,13 @@ function AuthScreen({
   onGmailLogin: () => void
   smtpForm: SmtpImapForm
   setSmtpForm: React.Dispatch<React.SetStateAction<SmtpImapForm>>
+  selectedPreset: ProviderPreset
   onPresetChange: (p: ProviderPreset) => void
   onConnect: () => void
   isConnecting: boolean
   connectError: string
 }) {
   const [showAdvancedMailSettings, setShowAdvancedMailSettings] = useState(false)
-  const presetForSelect = (): ProviderPreset => {
-    if (smtpForm.smtpHost.includes('gmail')) return 'gmail'
-    if (smtpForm.smtpHost.includes('office365') || smtpForm.smtpHost.includes('outlook'))
-      return 'outlook'
-    if (smtpForm.smtpHost.includes('yahoo')) return 'yahoo'
-    if (smtpForm.smtpHost.includes('mail.me.com')) return 'icloud'
-    if (smtpForm.smtpHost.includes('fastmail')) return 'fastmail'
-    if (smtpForm.smtpHost.includes('zoho')) return 'zoho'
-    if (smtpForm.smtpHost.includes('aol')) return 'aol'
-    if (smtpForm.smtpHost.includes('gmx')) return 'gmx'
-    if (smtpForm.smtpHost === '127.0.0.1' && smtpForm.imapPort === '1143') return 'proton'
-    return 'custom'
-  }
-
-  const selectedPreset = presetForSelect()
   const showServerSettings = showAdvancedMailSettings || selectedPreset === 'custom'
 
   return (
@@ -328,6 +317,31 @@ function AuthScreen({
 
               {showServerSettings && (
                 <div className="space-y-3 rounded-sm border border-[var(--border)] p-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex items-center gap-2">
+                      <Switch
+                        checked={smtpForm.useSmtp}
+                        onCheckedChange={(checked) =>
+                          setSmtpForm((f) => ({ ...f, useSmtp: checked }))
+                        }
+                      />
+                      <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
+                        SMTP
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <Switch
+                        checked={smtpForm.useImap}
+                        onCheckedChange={(checked) =>
+                          setSmtpForm((f) => ({ ...f, useImap: checked }))
+                        }
+                      />
+                      <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
+                        IMAP
+                      </span>
+                    </label>
+                  </div>
+
                   <div className="space-y-1">
                     <label className="font-mono text-[11px] text-[var(--muted-foreground)] uppercase tracking-widest">
                       Username override
@@ -336,6 +350,7 @@ function AuthScreen({
                       placeholder="Defaults to email"
                       className="font-mono text-[13px] h-8"
                       value={smtpForm.smtpUsername}
+                      disabled={!smtpForm.useSmtp && !smtpForm.useImap}
                       onChange={(e) => {
                         const username = e.target.value
                         setSmtpForm((f) => ({
@@ -357,6 +372,7 @@ function AuthScreen({
                         placeholder="smtp.example.com"
                         className="col-span-2 font-mono text-[13px] h-8"
                         value={smtpForm.smtpHost}
+                        disabled={!smtpForm.useSmtp}
                         onChange={(e) => setSmtpForm((f) => ({ ...f, smtpHost: e.target.value }))}
                       />
                       <Input
@@ -364,12 +380,14 @@ function AuthScreen({
                         type="number"
                         className="font-mono text-[13px] h-8"
                         value={smtpForm.smtpPort}
+                        disabled={!smtpForm.useSmtp}
                         onChange={(e) => setSmtpForm((f) => ({ ...f, smtpPort: e.target.value }))}
                       />
                     </div>
                     <div className="flex items-center gap-2">
                       <Switch
                         checked={smtpForm.smtpSecure}
+                        disabled={!smtpForm.useSmtp}
                         onCheckedChange={(checked) =>
                           setSmtpForm((f) => ({ ...f, smtpSecure: checked }))
                         }
@@ -390,6 +408,7 @@ function AuthScreen({
                         placeholder="imap.example.com"
                         className="col-span-2 font-mono text-[13px] h-8"
                         value={smtpForm.imapHost}
+                        disabled={!smtpForm.useImap}
                         onChange={(e) => setSmtpForm((f) => ({ ...f, imapHost: e.target.value }))}
                       />
                       <Input
@@ -397,12 +416,14 @@ function AuthScreen({
                         type="number"
                         className="font-mono text-[13px] h-8"
                         value={smtpForm.imapPort}
+                        disabled={!smtpForm.useImap}
                         onChange={(e) => setSmtpForm((f) => ({ ...f, imapPort: e.target.value }))}
                       />
                     </div>
                     <div className="flex items-center gap-2">
                       <Switch
                         checked={smtpForm.imapSecure}
+                        disabled={!smtpForm.useImap}
                         onCheckedChange={(checked) =>
                           setSmtpForm((f) => ({ ...f, imapSecure: checked }))
                         }
@@ -425,7 +446,8 @@ function AuthScreen({
                 disabled={
                   isConnecting ||
                   !smtpForm.email ||
-                  !smtpForm.smtpPassword
+                  !smtpForm.smtpPassword ||
+                  (!smtpForm.useSmtp && !smtpForm.useImap)
                 }
                 className="font-mono text-[13px] w-full bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 h-10 mt-2"
               >
@@ -467,11 +489,13 @@ export default function Home() {
   const [smtpForm, setSmtpForm] = useState<SmtpImapForm>({
     email: '',
     displayName: '',
+    useSmtp: true,
     smtpHost: PRESETS.gmail.smtpHost!,
     smtpPort: PRESETS.gmail.smtpPort!,
     smtpSecure: PRESETS.gmail.smtpSecure!,
     smtpUsername: '',
     smtpPassword: '',
+    useImap: true,
     imapHost: PRESETS.gmail.imapHost!,
     imapPort: PRESETS.gmail.imapPort!,
     imapSecure: PRESETS.gmail.imapSecure!,
@@ -480,20 +504,31 @@ export default function Home() {
   })
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectError, setConnectError] = useState('')
+  const [selectedPreset, setSelectedPreset] = useState<ProviderPreset>('gmail')
 
   function handlePresetChange(preset: ProviderPreset) {
-    if (preset !== 'custom') {
-      const p = PRESETS[preset]
+    setSelectedPreset(preset)
+    if (preset === 'custom') {
       setSmtpForm((f) => ({
         ...f,
-        smtpHost: p.smtpHost!,
-        smtpPort: p.smtpPort!,
-        smtpSecure: p.smtpSecure!,
-        imapHost: p.imapHost!,
-        imapPort: p.imapPort!,
-        imapSecure: p.imapSecure!,
+        smtpHost: '',
+        smtpPort: '',
+        imapHost: '',
+        imapPort: '',
       }))
+      return
     }
+
+    const p = PRESETS[preset]
+    setSmtpForm((f) => ({
+      ...f,
+      smtpHost: p.smtpHost!,
+      smtpPort: p.smtpPort!,
+      smtpSecure: p.smtpSecure!,
+      imapHost: p.imapHost!,
+      imapPort: p.imapPort!,
+      imapSecure: p.imapSecure!,
+    }))
   }
 
   async function handleSmtpConnect() {
@@ -501,9 +536,14 @@ export default function Home() {
     setConnectError('')
     const payload = {
       ...smtpForm,
-      smtpUsername: smtpForm.smtpUsername || smtpForm.email,
-      imapUsername: smtpForm.imapUsername || smtpForm.smtpUsername || smtpForm.email,
-      imapPassword: smtpForm.imapPassword || smtpForm.smtpPassword,
+      smtpHost: smtpForm.useSmtp ? smtpForm.smtpHost : '',
+      smtpPort: smtpForm.useSmtp ? smtpForm.smtpPort : '',
+      smtpUsername: smtpForm.useSmtp ? (smtpForm.smtpUsername || smtpForm.email) : '',
+      smtpPassword: smtpForm.useSmtp ? smtpForm.smtpPassword : '',
+      imapHost: smtpForm.useImap ? smtpForm.imapHost : '',
+      imapPort: smtpForm.useImap ? smtpForm.imapPort : '',
+      imapUsername: smtpForm.useImap ? (smtpForm.imapUsername || smtpForm.smtpUsername || smtpForm.email) : '',
+      imapPassword: smtpForm.useImap ? (smtpForm.imapPassword || smtpForm.smtpPassword) : '',
     }
     try {
       const res = await fetch('/api/auth/smtp-connect', {
@@ -629,6 +669,7 @@ export default function Home() {
         onGmailLogin={login}
         smtpForm={smtpForm}
         setSmtpForm={setSmtpForm}
+        selectedPreset={selectedPreset}
         onPresetChange={handlePresetChange}
         onConnect={handleSmtpConnect}
         isConnecting={isConnecting}

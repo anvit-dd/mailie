@@ -1,5 +1,5 @@
 import type { GmailMessage, GmailMessagePayload } from '@/lib/gmail-utils'
-import { getAccountWithTokens } from '@/lib/session'
+import { encryptToken, getAccountWithTokens } from '@/lib/session'
 import { getGmailClientId, getGmailClientSecret } from '@/lib/gmail-config'
 import { db } from '@/lib/db'
 
@@ -42,7 +42,7 @@ export async function getValidGmailAccessToken(accountId: string): Promise<strin
 
   db.prepare(`
     UPDATE gmail_tokens SET access_token = ?, expires_at = ?, updated_at = ? WHERE account_id = ?
-  `).run(tokens.access_token, newExpiresAt, Date.now(), account.id)
+  `).run(encryptToken(tokens.access_token), newExpiresAt, Date.now(), account.id)
 
   return tokens.access_token
 }

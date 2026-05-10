@@ -16,15 +16,15 @@ import { mergeCachedContacts, syncContactsFromMailbox, type Contact } from '@/li
 function imapMessageToEmail(msg: {
   uid: string; subject: string; from: { name: string | null; address: string };
   to: { name: string | null; address: string }[]; date: Date; flags: string[];
-  hasAttachments: boolean; size: number;
+  hasAttachments: boolean; size: number; folder: string;
 }): Email {
   const isRead = msg.flags.includes('\\Seen')
   const isStarred = msg.flags.includes('\\Flagged')
   const labels: string[] = []
   if (msg.flags.includes('\\Draft')) labels.push('DRAFT')
   return {
-    id: msg.uid,
-    threadId: msg.uid,
+    id: `imap:${msg.folder}:${msg.uid}`,
+    threadId: `imap:${msg.folder}:${msg.uid}`,
     subject: msg.subject,
     preview: '',
     from: { name: msg.from.name ?? '', email: msg.from.address },
@@ -34,6 +34,17 @@ function imapMessageToEmail(msg: {
     isStarred,
     hasAttachments: msg.hasAttachments,
     labels,
+  }
+}
+
+function parseImapEmailId(id: string, fallbackFolder: string): { uid: string; folder: string } {
+  if (!id.startsWith('imap:')) return { uid: id, folder: fallbackFolder }
+  const value = id.slice('imap:'.length)
+  const separatorIndex = value.lastIndexOf(':')
+  if (separatorIndex === -1) return { uid: value, folder: fallbackFolder }
+  return {
+    folder: value.slice(0, separatorIndex),
+    uid: value.slice(separatorIndex + 1),
   }
 }
 
@@ -143,6 +154,7 @@ function imapFolderToFolder(folder: { path: string; name: string; specialUse?: s
 export function EmailProvider({ children }: { children: React.ReactNode }) {
   const { provider: accountProvider, account } = useAuth()
   const accountEmail = account?.email
+  const canReadMail = accountProvider !== 'smtp_imap' || account?.capabilities.imap === true
   const [emails, setEmails] = useState<Email[]>([])
   const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null)
   const [currentFolder, setCurrentFolder] = useState<Folder>({
@@ -227,7 +239,18 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    if (accountProvider !== 'smtp_imap') return
+    if (accountProvider !== 'smtp_imap' || !canReadMail) {
+      const timer = window.setTimeout(() => {
+        if (!isActive) return
+        setFolders([])
+        setEmails([])
+        setSelectedEmail(null)
+      }, 0)
+      return () => {
+        isActive = false
+        window.clearTimeout(timer)
+      }
+    }
 
     async function loadImapFolders() {
       try {
@@ -256,7 +279,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isActive = false
     }
-  }, [accountProvider])
+  }, [accountProvider, canReadMail])
 
   const refreshEmails = useCallback(async (query = '', options?: { force?: boolean; append?: boolean }): Promise<Email[]> => {
     const pageToken = options?.append ? nextPageTokenRef.current ?? undefined : undefined
@@ -279,6 +302,12 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
 
     try {
       if (accountProvider === 'smtp_imap') {
+        if (!canReadMail) {
+          setEmails([])
+          setNextPageToken(null)
+          setError('IMAP is not configured for this account')
+          return []
+        }
         // ── IMAP path ──────────────────────────────────────
         const params = new URLSearchParams({
           folder: currentFolder.id,
@@ -291,7 +320,10 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
           signal: controller.signal,
         })
         if (!isCurrentRequest()) return emailsRef.current
-        if (!res.ok) throw new Error('Failed to fetch IMAP messages')
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({})) as { error?: string }
+          throw new Error(error.error || 'Failed to fetch IMAP messages')
+        }
 
         const data: { messages: Array<{
           uid: string; subject: string; from: { name: string | null; address: string };
@@ -302,6 +334,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
         const mappedEmails = data.messages.map((m) => imapMessageToEmail({
           ...m,
           date: new Date(m.date),
+          folder: currentFolder.id,
         }))
         nextEmails = options?.append ? [...emailsRef.current, ...mappedEmails] : mappedEmails
         setEmails(nextEmails)
@@ -368,7 +401,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       }
     }
     return nextEmails
-  }, [currentFolder.id, accountProvider, accountEmail])
+  }, [currentFolder.id, accountProvider, accountEmail, canReadMail])
 
   const loadEmailDetail = useCallback(async (id: string) => {
     setPendingEmailId(id)
@@ -377,9 +410,14 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
 
     try {
       if (accountProvider === 'smtp_imap') {
+        if (!canReadMail) throw new Error('IMAP is not configured for this account')
         // IMAP path
-        const res = await fetch(`/api/imap/messages/${id}?folder=${encodeURIComponent(currentFolder.id)}`)
-        if (!res.ok) throw new Error('Failed to load email')
+        const { uid, folder } = parseImapEmailId(id, currentFolder.id)
+        const res = await fetch(`/api/imap/messages/${uid}?folder=${encodeURIComponent(folder)}`)
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({})) as { error?: string }
+          throw new Error(error.error || 'Failed to load email')
+        }
         const msg: {
           uid: string; subject: string; from: { name: string | null; address: string };
           to: { name: string | null; address: string }[]; date: string; flags: string[];
@@ -390,8 +428,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
         } = await res.json()
 
         const detail: EmailDetail = {
-          id: msg.uid,
-          threadId: msg.uid,
+          id,
+          threadId: id,
           subject: msg.subject,
           preview: '',
           from: { name: msg.from.name ?? '', email: msg.from.address },
@@ -417,10 +455,10 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
         // Mark as read
         if (!detail.isRead) {
           setEmails((prev) => prev.map((e) => e.id === id ? { ...e, isRead: true } : e))
-          fetch(`/api/imap/messages/${id}/move`, {
+          fetch(`/api/imap/messages/${uid}/flags`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ folder: currentFolder.id, destination: currentFolder.id }),
+            body: JSON.stringify({ folder, seen: true }),
           }).catch(() => {
             // fire-and-forget; best-effort mark-as-read via flag update
           })
@@ -460,7 +498,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       setIsLoadingEmail(false)
       setPendingEmailId(null)
     }
-  }, [accountProvider, currentFolder.id])
+  }, [accountProvider, currentFolder.id, canReadMail])
 
   // Strip base64 image data URLs from HTML before saving to localStorage.
   // Base64 images are large (megabytes) and will QuotaExceededError.
@@ -551,16 +589,27 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     )
 
     try {
-      const res = await fetch('/api/gmail/modify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messageId: emailId,
-          addLabels: isStarred ? [] : ['STARRED'],
-          removeLabels: isStarred ? ['STARRED'] : [],
-        }),
-      })
-      if (!res.ok) throw new Error('Failed to toggle star')
+      if (accountProvider === 'smtp_imap') {
+        if (!canReadMail) throw new Error('IMAP is not configured for this account')
+        const { uid, folder } = parseImapEmailId(emailId, currentFolder.id)
+        const res = await fetch(`/api/imap/messages/${uid}/flags`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder, flagged: !isStarred }),
+        })
+        if (!res.ok) throw new Error('Failed to toggle star')
+      } else {
+        const res = await fetch('/api/gmail/modify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messageId: emailId,
+            addLabels: isStarred ? [] : ['STARRED'],
+            removeLabels: isStarred ? ['STARRED'] : [],
+          }),
+        })
+        if (!res.ok) throw new Error('Failed to toggle star')
+      }
     } catch (err) {
       console.error('Failed to toggle star:', err)
       // Revert optimistic update on failure
@@ -573,7 +622,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
         prev?.id === emailId ? { ...prev, isStarred } : prev
       )
     }
-  }, [])
+  }, [accountProvider, canReadMail, currentFolder.id])
 
   const trashEmail = useCallback(async (emailId: string) => {
     // Optimistic remove from list
@@ -596,10 +645,12 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
 
     try {
       if (accountProvider === 'smtp_imap') {
-        const res = await fetch(`/api/imap/messages/${emailId}/move`, {
+        if (!canReadMail) throw new Error('IMAP is not configured for this account')
+        const { uid, folder } = parseImapEmailId(emailId, currentFolder.id)
+        const res = await fetch(`/api/imap/messages/${uid}/move`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder: currentFolder.id, destination: 'Trash' }),
+          body: JSON.stringify({ folder, destination: 'Trash' }),
         })
         if (!res.ok) throw new Error('Failed to trash email')
       } else {
@@ -614,7 +665,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to trash email:', err)
       if (removedEmail) setEmails((prev) => [removedEmail!, ...prev])
     }
-  }, [accountProvider, currentFolder.id])
+  }, [accountProvider, currentFolder.id, canReadMail])
 
   const markAsRead = useCallback(async (emailId: string, read: boolean) => {
     setEmails((prev) =>
@@ -625,10 +676,12 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     )
     try {
       if (accountProvider === 'smtp_imap') {
-        await fetch(`/api/imap/messages/${emailId}/flags`, {
+        if (!canReadMail) throw new Error('IMAP is not configured for this account')
+        const { uid, folder } = parseImapEmailId(emailId, currentFolder.id)
+        await fetch(`/api/imap/messages/${uid}/flags`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder: currentFolder.id, seen: read }),
+          body: JSON.stringify({ folder, seen: read }),
         })
       } else {
         await fetch('/api/gmail/modify', {
@@ -644,7 +697,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('markAsRead failed:', err)
     }
-  }, [accountProvider, currentFolder.id])
+  }, [accountProvider, currentFolder.id, canReadMail])
 
   const loadGmailUnreadCounts = useCallback(async () => {
     try {
@@ -693,10 +746,12 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
 
     try {
       if (accountProvider === 'smtp_imap') {
-        await fetch(`/api/imap/messages/${emailId}/move`, {
+        if (!canReadMail) throw new Error('IMAP is not configured for this account')
+        const { uid, folder } = parseImapEmailId(emailId, currentFolder.id)
+        await fetch(`/api/imap/messages/${uid}/move`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder: currentFolder.id, destination: 'Archive' }),
+          body: JSON.stringify({ folder, destination: 'Archive' }),
         })
       } else {
         await fetch('/api/gmail/modify', {
@@ -709,23 +764,25 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       console.error('archiveEmail failed:', err)
       if (removedEmail) setEmails((prev) => [removedEmail!, ...prev])
     }
-  }, [accountProvider, currentFolder.id])
+  }, [accountProvider, currentFolder.id, canReadMail])
 
   const moveEmail = useCallback(async (emailId: string, folder: string, destination: string) => {
     setEmails((prev) => prev.filter((e) => e.id !== emailId))
     setSelectedEmail((prev) => (prev?.id === emailId ? null : prev))
     try {
       if (accountProvider === 'smtp_imap') {
-        await fetch(`/api/imap/messages/${emailId}/move`, {
+        if (!canReadMail) throw new Error('IMAP is not configured for this account')
+        const { uid, folder: sourceFolder } = parseImapEmailId(emailId, folder)
+        await fetch(`/api/imap/messages/${uid}/move`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder, destination }),
+          body: JSON.stringify({ folder: sourceFolder, destination }),
         })
       }
     } catch (err) {
       console.error('moveEmail failed:', err)
     }
-  }, [accountProvider])
+  }, [accountProvider, canReadMail])
 
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {

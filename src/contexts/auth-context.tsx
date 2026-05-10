@@ -7,6 +7,10 @@ interface Account {
   email: string
   name: string | null
   provider: 'gmail' | 'smtp_imap'
+  capabilities: {
+    smtp: boolean
+    imap: boolean
+  }
 }
 
 interface AuthContextType {
@@ -32,7 +36,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const res = await fetch('/api/auth/me')
         const data = await res.json()
         if (data.user) {
-          setAccount(data.user)
+          setAccount({
+            ...data.user,
+            capabilities: data.user.capabilities ?? { smtp: true, imap: true },
+          })
         }
       } catch (e) {
         console.error('Failed to fetch user', e)
