@@ -261,9 +261,11 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
 
     const controller = new AbortController()
 
-    setIsLoading(true)
-    setEmailHtml(null)
-    setError(null)
+    const loadingTimer = setTimeout(() => {
+      setIsLoading(true)
+      setEmailHtml(null)
+      setError(null)
+    }, 0)
 
     fetch(`/api/gmail/body?id=${selectedEmail.id}`, {
       signal: controller.signal,
@@ -289,7 +291,10 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
         setIsLoading(false)
       })
 
-    return () => controller.abort()
+    return () => {
+      clearTimeout(loadingTimer)
+      controller.abort()
+    }
   }, [selectedEmail.id])
 
   return (
@@ -330,7 +335,7 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
                 padding: noPadding ? 12 : 16,
                 boxSizing: 'border-box',
               }}
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-same-origin"
               title={`Email: ${selectedEmail.subject}`}
               srcDoc={buildSrcdoc(emailHtml)}
             />

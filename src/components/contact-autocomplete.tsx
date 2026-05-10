@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
-import { toast } from 'sonner'
-
-export interface Contact {
-  name: string
-  email: string
-}
+import {
+  CONTACTS_UPDATED_EVENT,
+  mergeCachedContacts,
+  readCachedContacts,
+  type Contact,
+} from '@/lib/contact-cache'
 
 // Load contacts from localStorage (collected from sent/received emails)
 const CONTACTS_KEY = 'mailie_contacts'
@@ -41,6 +41,20 @@ export function recordContact(email: string, name?: string) {
   saveContact(email, name)
 }
 
+export function recordAccountContact(
+  provider: string | null,
+  accountKey: string | undefined,
+  email: string,
+  name?: string
+) {
+  saveContact(email, name)
+  mergeCachedContacts({
+    provider,
+    accountKey,
+    contacts: [{ email, name: name || '' }],
+  })
+}
+
 interface ContactAutocompleteProps {
   value: string
   onChange: (value: string) => void
@@ -61,83 +75,56 @@ export function ContactAutocomplete({
   className,
   excludeEmails = [],
 }: ContactAutocompleteProps) {
-  const { provider } = useAuth()
-  const [suggestions, setSuggestions] = useState<Contact[]>([])
-  const [showDropdown, setShowDropdown] = useState(false)
-  const [focusedIndex, setFocusedIndex] = useState(-1)
+  const { provider, account } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const [focusedIndex, setFocusedIndex] = useState(-1)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [localContacts, setLocalContacts] = useState<Contact[]>(() => loadLocalContacts())
+  const [gmailContacts, setGmailContacts] = useState<Contact[]>(
+    () => readCachedContacts(provider, account?.email)
+  )
 
-  // Load local contacts from localStorage on mount — useEffect ensures we re-read
-  // whenever contacts are saved (e.g. after sending an email closes and reopens compose)
-  const [localContacts, setLocalContacts] = useState<Contact[]>([])
+  const excludeSet = useMemo(
+    () => new Set(excludeEmails.map((e) => e.toLowerCase())),
+    [excludeEmails]
+  )
 
-  // Fetch Gmail contacts when provider is gmail
-  const [gmailContacts, setGmailContacts] = useState<Contact[]>([])
-
-  // Stable excludeEmails set for the filter effect
-  const excludeSet = useMemo(() => new Set(excludeEmails.map((e) => e.toLowerCase())), [excludeEmails])
-
-  // Re-read localStorage on mount (handles contacts saved in a previous compose session)
-  useEffect(() => {
-    setLocalContacts(loadLocalContacts())
-  }, [])
-
-  // Compute all contacts (local + Gmail, deduplicated) — stable reference
   const allContacts = useMemo(() => {
-    const merged = [...gmailContacts]
-    for (const c of localContacts) {
-      if (!merged.some((ac) => ac.email.toLowerCase() === c.email.toLowerCase())) {
-        merged.push(c)
+    const merged = provider === 'gmail' ? [...gmailContacts] : []
+    for (const contact of localContacts) {
+      if (!merged.some((existing) => existing.email.toLowerCase() === contact.email.toLowerCase())) {
+        merged.push(contact)
       }
     }
     return merged
-  }, [gmailContacts, localContacts])
+  }, [gmailContacts, localContacts, provider])
 
   useEffect(() => {
-    if (provider !== 'gmail') return
-
-    async function fetchGmailContacts() {
-      try {
-        const res = await fetch('/api/contacts/list', {
-          credentials: 'include',
-        })
-        if (!res.ok) {
-          console.error('[contacts] Gmail API returned', res.status)
-          return
-        }
-        const data = await res.json() as { contacts?: Array<{ name?: string; email: string }> }
-        if (data.contacts) {
-          setGmailContacts(data.contacts.map((c) => ({ name: c.name || '', email: c.email })))
-        }
-      } catch (err) {
-        console.error('[contacts] failed to load Gmail contacts:', err)
-      }
+    function refreshContacts() {
+      setLocalContacts(loadLocalContacts())
+      setGmailContacts(readCachedContacts(provider, account?.email))
     }
 
-    void fetchGmailContacts()
-  }, [provider])
+    window.addEventListener(CONTACTS_UPDATED_EVENT, refreshContacts)
+    return () => window.removeEventListener(CONTACTS_UPDATED_EVENT, refreshContacts)
+  }, [provider, account?.email])
 
-  useEffect(() => {
-    if (!value.trim()) {
-      setSuggestions([])
-      setShowDropdown(false)
-      return
-    }
+  const suggestions = useMemo(() => {
+    if (!value.trim()) return []
 
     const query = value.toLowerCase()
-    const filtered = allContacts
-      .filter((c) => {
-        const matches = c.email.toLowerCase().includes(query) || c.name.toLowerCase().includes(query)
-        const notExcluded = !excludeSet.has(c.email.toLowerCase())
-        return matches && notExcluded
+    return allContacts
+      .filter((contact) => {
+        const matches =
+          contact.email.toLowerCase().includes(query) ||
+          contact.name.toLowerCase().includes(query)
+        return matches && !excludeSet.has(contact.email.toLowerCase())
       })
       .slice(0, 8)
-
-    setSuggestions(filtered)
-    setShowDropdown(filtered.length > 0)
-    setFocusedIndex(-1)
   }, [value, allContacts, excludeSet])
+
+  const showDropdown = isDropdownOpen && suggestions.length > 0
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (!showDropdown) return
@@ -159,41 +146,42 @@ export function ContactAutocomplete({
         }
         break
       case 'Escape':
-        setShowDropdown(false)
+        setIsDropdownOpen(false)
         setFocusedIndex(-1)
         break
     }
   }
 
   function selectContact(contact: Contact) {
-    // Add to recipient list immediately (not just as text input)
     onAdd?.(contact.email)
     onSelectContact?.(contact)
-    setShowDropdown(false)
+    setIsDropdownOpen(false)
     setFocusedIndex(-1)
-    // Clear the input after selecting
     onChange('')
     inputRef.current?.focus()
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     onChange(e.target.value)
+    setIsDropdownOpen(Boolean(e.target.value.trim()))
+    setFocusedIndex(-1)
   }
 
   function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     handleKeyDown(e)
-    // Add raw typed email on Enter (when not selecting from suggestions)
+
     if (e.key === 'Enter' && !e.shiftKey && focusedIndex < 0 && value.trim()) {
       const email = value.trim()
       if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         e.preventDefault()
         onAdd?.(email)
         onChange('')
+        setIsDropdownOpen(false)
+        setFocusedIndex(-1)
       }
     }
   }
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (
@@ -202,9 +190,11 @@ export function ContactAutocomplete({
         inputRef.current &&
         !inputRef.current.contains(e.target as Node)
       ) {
-        setShowDropdown(false)
+        setIsDropdownOpen(false)
+        setFocusedIndex(-1)
       }
     }
+
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
@@ -216,15 +206,16 @@ export function ContactAutocomplete({
         type="email"
         value={value}
         onChange={handleInputChange}
+        onFocus={() => setIsDropdownOpen(Boolean(value.trim()))}
         onKeyDown={handleInputKeyDown}
         placeholder={placeholder}
         className={className}
         autoComplete="off"
       />
-      {showDropdown && suggestions.length > 0 && (
+      {showDropdown && (
         <div
           ref={dropdownRef}
-          className="absolute z-50 top-full left-0 right-0 mt-1 bg-[var(--card)] border border-[var(--border)] rounded-sm shadow-xl max-h-60 overflow-y-auto"
+          className="absolute z-50 top-full left-0 mt-1 w-[min(420px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] bg-[var(--card)] border border-[var(--border)] rounded-sm shadow-xl max-h-60 overflow-y-auto"
         >
           {suggestions.map((contact, idx) => (
             <button

@@ -57,6 +57,13 @@ db.exec(`
     expires_at INTEGER NOT NULL,
     created_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS account_preferences (
+    account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    hidden_gmail_label_ids TEXT NOT NULL DEFAULT '[]',
+    gmail_label_order TEXT NOT NULL DEFAULT '[]',
+    updated_at INTEGER NOT NULL
+  );
 `)
 
 // Migrate old schema: add picture column if missing (CREATE TABLE IF NOT EXISTS won't alter existing tables)
@@ -69,6 +76,12 @@ try {
 // Migrate old schema: add provider column if missing
 try {
   db.exec(`ALTER TABLE accounts ADD COLUMN provider TEXT DEFAULT 'gmail'`)
+} catch {
+  // Column already exists — ignore
+}
+
+try {
+  db.exec(`ALTER TABLE account_preferences ADD COLUMN gmail_label_order TEXT NOT NULL DEFAULT '[]'`)
 } catch {
   // Column already exists — ignore
 }

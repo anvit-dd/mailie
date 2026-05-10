@@ -40,6 +40,13 @@ export function MobileNav({ onCompose, onSettingsOpen }: MobileNavProps) {
   const { folders, currentFolder, setCurrentFolder } = useEmail()
   const [open, setOpen] = useState(false)
 
+  function updateFolderRoute(folderId: string) {
+    const url = new URL(window.location.href)
+    url.searchParams.set('folder', folderId)
+    url.searchParams.delete('email')
+    window.history.pushState({ folderId }, '', url.toString())
+  }
+
   const handleLogout = async () => {
     try {
       await logout()
@@ -52,6 +59,7 @@ export function MobileNav({ onCompose, onSettingsOpen }: MobileNavProps) {
   const handleFolderSelect = (folder: typeof currentFolder) => {
     startTransition(() => {
       setCurrentFolder(folder)
+      updateFolderRoute(folder.id)
     })
     setOpen(false)
   }

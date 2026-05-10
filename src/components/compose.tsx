@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useRef, type ChangeEvent, type Dispatch, type KeyboardEvent, type SetStateAction } from 'react'
+import { useEffect, useState, useMemo, useRef, type ChangeEvent, type Dispatch, type SetStateAction } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -22,7 +22,7 @@ import { TextAlign } from '@tiptap/extension-text-align'
 import { FontFamily } from '@tiptap/extension-font-family'
 import { ComposeToolbar } from './compose-toolbar'
 import { ContactAutocomplete } from './contact-autocomplete'
-import { recordContact } from './contact-autocomplete'
+import { recordAccountContact } from './contact-autocomplete'
 
 const AlignableImage = Image.extend({
   addAttributes() {
@@ -178,7 +178,7 @@ function serializeImageAlignment(html: string): string {
 
 export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposeProps) {
   const { saveDraft } = useEmail()
-  const { provider } = useAuth()
+  const { provider, account } = useAuth()
 
   const [to, setTo] = useState<string[]>(() => (replyTo?.to ? [replyTo.to] : []))
   const [toInput, setToInput] = useState('')
@@ -284,7 +284,7 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
   })
 
   // Track bodyHtml for draft saving
-  const [bodyHtml, setBodyHtml] = useState(initialBodyHtml)
+  const [, setBodyHtml] = useState(initialBodyHtml)
 
   // Sync bodyHtml when replyTo changes (e.g., switching between reply contexts)
   useEffect(() => {
@@ -322,7 +322,9 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
 
   // Reset form state when compose opens fresh (no replyTo)
   useEffect(() => {
-    if (isOpen && !replyTo) {
+    if (!isOpen || replyTo) return
+
+    const resetTimer = setTimeout(() => {
       setTo([])
       setCc([])
       setBcc([])
@@ -332,7 +334,9 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
       setLastSaved(null)
       editor?.commands.clearContent()
       setBodyHtml('')
-    }
+    }, 0)
+
+    return () => clearTimeout(resetTimer)
   }, [isOpen, replyTo, editor])
 
   const addRecipient = (
@@ -356,19 +360,6 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
     setList: Dispatch<SetStateAction<string[]>>
   ) => {
     setList(list.filter((item) => item !== email))
-  }
-
-  const handleRecipientKeyDown = (
-    e: KeyboardEvent<HTMLInputElement>,
-    value: string,
-    list: string[],
-    setList: Dispatch<SetStateAction<string[]>>,
-    setInput: Dispatch<SetStateAction<string>>
-  ) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      addRecipient(value, list, setList, setInput)
-    }
   }
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -452,8 +443,8 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
         throw new Error(err.error || 'Failed to send email')
       }
 
-      to.forEach((email) => recordContact(email))
-      cc.forEach((email) => recordContact(email))
+      to.forEach((email) => recordAccountContact(provider, account?.email, email))
+      cc.forEach((email) => recordAccountContact(provider, account?.email, email))
       onClose()
       toast.success('Email sent', {
         description: `To: ${to.join(', ')}${cc.length ? ` · Cc: ${cc.join(', ')}` : ''}${bcc.length ? ' · Bcc: hidden' : ''}`,

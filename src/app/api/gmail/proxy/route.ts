@@ -14,10 +14,10 @@ export async function GET(request: NextRequest) {
   }
 
   const account = getAccountWithTokens(session.account_id)
-  const accessToken = await getValidGmailAccessToken(session.account_id)
   if (!account?.gmailTokens) {
     return new NextResponse('No Gmail connection', { status: 401 })
   }
+  const accessToken = await getValidGmailAccessToken(session.account_id)
 
   const { searchParams } = new URL(request.url)
   const urlParam = searchParams.get('url')
@@ -43,6 +43,11 @@ export async function GET(request: NextRequest) {
         { headers: { Authorization: `Bearer ${accessToken}` } }
       )
       if (!msgRes.ok) {
+        console.error('[gmail/proxy] failed to fetch message for CID', {
+          messageId,
+          status: msgRes.status,
+          statusText: msgRes.statusText,
+        })
         return new NextResponse('Failed to fetch message for attachment', { status: msgRes.status })
       }
       const msg = await msgRes.json()
@@ -70,6 +75,12 @@ export async function GET(request: NextRequest) {
         { headers: { Authorization: `Bearer ${accessToken}` } }
       )
       if (!attRes.ok) {
+        console.error('[gmail/proxy] failed to fetch attachment data', {
+          messageId,
+          attachmentId: attachmentData.attachmentId,
+          status: attRes.status,
+          statusText: attRes.statusText,
+        })
         return new NextResponse('Failed to fetch attachment data', { status: attRes.status })
       }
       const att = await attRes.json()

@@ -10,6 +10,7 @@ import {
 } from '@/lib/gmail-utils'
 import { useAuth } from './auth-context'
 import { toast } from 'sonner'
+import { mergeCachedContacts, syncContactsFromMailbox, type Contact } from '@/lib/contact-cache'
 
 // IMAP response → Email adapter
 function imapMessageToEmail(msg: {
@@ -87,8 +88,61 @@ function readStoredDrafts(): Draft[] {
   }
 }
 
+function extractHeaderContacts(headerValue: string | undefined): Contact[] {
+  if (!headerValue) return []
+
+  const contacts: Contact[] = []
+  const addressPattern = /(?:"?([^"<,]*)"?\s*)?<([^<>@\s]+@[^<>@\s]+)>|([^<>,\s]+@[^<>,\s]+)/g
+  let match: RegExpExecArray | null
+
+  while ((match = addressPattern.exec(headerValue)) !== null) {
+    const email = match[2] || match[3]
+    const name = (match[1] || '').trim()
+    if (email) contacts.push({ email, name })
+  }
+
+  return contacts
+}
+
+function collectContactsFromGmailMessages(messages: GmailMessage[], ownEmail?: string | null): Contact[] {
+  const own = ownEmail?.toLowerCase()
+  const contacts: Contact[] = []
+
+  for (const message of messages) {
+    const headers = message.payload?.headers ?? []
+    for (const headerName of ['from', 'to', 'cc', 'bcc']) {
+      const headerValue = headers.find((header) => header.name.toLowerCase() === headerName)?.value
+      for (const contact of extractHeaderContacts(headerValue)) {
+        if (contact.email.toLowerCase() !== own) contacts.push(contact)
+      }
+    }
+  }
+
+  return contacts
+}
+
+function getImapFolderIcon(folder: { path: string; name: string; specialUse?: string }): string {
+  const value = `${folder.specialUse ?? ''} ${folder.path} ${folder.name}`.toLowerCase()
+  if (value.includes('sent')) return 'send'
+  if (value.includes('draft')) return 'file'
+  if (value.includes('trash') || value.includes('deleted')) return 'trash'
+  if (value.includes('spam') || value.includes('junk')) return 'spam'
+  if (value.includes('star') || value.includes('flag')) return 'star'
+  return 'inbox'
+}
+
+function imapFolderToFolder(folder: { path: string; name: string; specialUse?: string }): Folder {
+  return {
+    id: folder.path,
+    name: folder.name || folder.path,
+    icon: getImapFolderIcon(folder),
+    unreadCount: 0,
+  }
+}
+
 export function EmailProvider({ children }: { children: React.ReactNode }) {
-  const { provider: accountProvider } = useAuth()
+  const { provider: accountProvider, account } = useAuth()
+  const accountEmail = account?.email
   const [emails, setEmails] = useState<Email[]>([])
   const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null)
   const [currentFolder, setCurrentFolder] = useState<Folder>({
@@ -103,9 +157,8 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   const [pendingEmailId, setPendingEmailId] = useState<string | null>(null)
   const [nextPageToken, setNextPageToken] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Draft[]>(() => readStoredDrafts())
-  const [avatarMap, setAvatarMap] = useState<Record<string, string>>({})
+  const [avatarMap] = useState<Record<string, string>>({})
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [folderUnreadCounts, setFolderUnreadCounts] = useState<Record<string, number>>({})
   const foldersBase = getFolders()
   const [folders, setFolders] = useState<Folder[]>(foldersBase)
 
@@ -141,6 +194,69 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     nextPageTokenRef.current = nextPageToken
   }, [nextPageToken])
+
+  useEffect(() => {
+    if (accountProvider !== 'gmail') return
+
+    void syncContactsFromMailbox({
+      provider: accountProvider,
+      accountKey: accountEmail,
+    }).catch((err) => {
+      console.error('[contacts] background sync failed:', err)
+    })
+  }, [accountProvider, accountEmail])
+
+  useEffect(() => {
+    let isActive = true
+
+    if (accountProvider === 'gmail') {
+      const timer = window.setTimeout(() => {
+        if (!isActive) return
+        const gmailFolders = getFolders()
+        setFolders(gmailFolders)
+        setCurrentFolder((current) =>
+          gmailFolders.some((folder) => folder.id === current.id)
+            ? current
+            : gmailFolders[0]
+        )
+      }, 0)
+
+      return () => {
+        isActive = false
+        window.clearTimeout(timer)
+      }
+    }
+
+    if (accountProvider !== 'smtp_imap') return
+
+    async function loadImapFolders() {
+      try {
+        const res = await fetch('/api/imap/folders', { credentials: 'include' })
+        if (!res.ok) return
+
+        const data = await res.json() as {
+          folders?: Array<{ path: string; name: string; specialUse?: string }>
+        }
+        const imapFolders = (data.folders ?? []).map(imapFolderToFolder)
+        if (!isActive || imapFolders.length === 0) return
+
+        setFolders(imapFolders)
+        setCurrentFolder((current) =>
+          imapFolders.some((folder) => folder.id === current.id)
+            ? current
+            : imapFolders.find((folder) => folder.id.toUpperCase() === 'INBOX') ?? imapFolders[0]
+        )
+      } catch {
+        // Folder list is best-effort; keep default folders if IMAP list fails.
+      }
+    }
+
+    void loadImapFolders()
+
+    return () => {
+      isActive = false
+    }
+  }, [accountProvider])
 
   const refreshEmails = useCallback(async (query = '', options?: { force?: boolean; append?: boolean }): Promise<Email[]> => {
     const pageToken = options?.append ? nextPageTokenRef.current ?? undefined : undefined
@@ -214,6 +330,11 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
           if (!batchRes.ok) throw new Error('Failed to fetch email batch')
 
           const { messages }: { messages: GmailMessage[] } = await batchRes.json()
+          mergeCachedContacts({
+            provider: accountProvider,
+            accountKey: accountEmail,
+            contacts: collectContactsFromGmailMessages(messages, accountEmail),
+          })
 
           setEmailCache((prev) => {
             const next = new Map(Object.entries(prev))
@@ -226,26 +347,6 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
           setEmails(nextEmails)
           setNextPageToken(data.nextPageToken ?? null)
 
-          const uniqueEmails = [...new Set(messages.map((m) => {
-            const fromHeader = m.payload?.headers?.find((h: { name: string; value: string }) => h.name.toLowerCase() === 'from')
-            const emailMatch = fromHeader?.value?.match(/<(.+?)>/)
-            return emailMatch ? emailMatch[1] : fromHeader?.value ?? ''
-          }).filter(Boolean))]
-
-          if (uniqueEmails.length > 0) {
-            try {
-              const avatarRes = await fetch(`/api/contacts/avatar?emails=${uniqueEmails.join(',')}`, {
-                signal: controller.signal,
-              })
-              if (!isCurrentRequest()) return emailsRef.current
-              if (avatarRes.ok) {
-                const avatarData: Record<string, string> = await avatarRes.json()
-                setAvatarMap((prev) => ({ ...prev, ...avatarData }))
-              }
-            } catch {
-              // Non-fatal
-            }
-          }
         } else {
           nextEmails = []
           setEmails([])
@@ -267,7 +368,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
       }
     }
     return nextEmails
-  }, [currentFolder.id, accountProvider])
+  }, [currentFolder.id, accountProvider, accountEmail])
 
   const loadEmailDetail = useCallback(async (id: string) => {
     setPendingEmailId(id)
@@ -548,15 +649,19 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
   const loadGmailUnreadCounts = useCallback(async () => {
     try {
       const res = await fetch('/api/gmail/labels')
-      if (!res.ok) return
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({})) as { error?: string; upstreamStatus?: number }
+        console.warn('[gmail/labels] failed to load unread counts:', error.error ?? res.statusText, error.upstreamStatus ?? res.status)
+        return
+      }
       const data = await res.json()
       const counts: Record<string, number> = {}
       for (const label of data.labels ?? []) {
-        if (label.unreadMessages != null) {
-          counts[label.id] = label.unreadMessages
+        const unreadCount = label.messagesUnreadCount ?? label.messagesUnread
+        if (unreadCount != null) {
+          counts[label.id] = unreadCount
         }
       }
-      setFolderUnreadCounts(counts)
       setFolders((prev) =>
         prev.map((f) => ({
           ...f,
