@@ -176,11 +176,9 @@ export async function verifyImapConnection(
     return { success: false, error: msg }
   } finally {
     try {
-      if (client.usable) {
-        await client.logout()
-      }
+      await client.logout()
     } catch {
-      // If connect failed, imapflow may have no active connection to close.
+      // If connect failed, imapflow has no active connection to close — ignore.
     }
   }
 }

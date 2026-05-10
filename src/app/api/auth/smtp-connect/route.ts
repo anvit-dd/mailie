@@ -47,40 +47,48 @@ export async function POST(request: NextRequest) {
     imapPassword,
   } = body
 
-  if (!email || !smtpPassword || !imapPassword) {
-    return NextResponse.json({ error: 'Email and passwords are required' }, { status: 400 })
+  if (!email || !smtpPassword) {
+    return NextResponse.json({ error: 'Email and SMTP password are required' }, { status: 400 })
   }
+
+  // For Resend SMTP, the username is always "resend" regardless of email
+  const isResend = smtpHost.toLowerCase() === 'smtp.resend.com'
+  const resolvedSmtpUsername = isResend ? 'resend' : (smtpUsername || email)
 
   // 1. Verify SMTP
   const smtpResult = await verifySmtpConnection(
     smtpHost,
     parseInt(smtpPort, 10),
     smtpSecure,
-    smtpUsername || email,
+    resolvedSmtpUsername,
     smtpPassword,
   )
   if (!smtpResult.success) {
     return NextResponse.json({ error: `SMTP: ${smtpResult.error}` }, { status: 400 })
   }
 
-  // 2. Verify IMAP
-  const imapResult = await verifyImapConnection(
-    imapHost,
-    parseInt(imapPort, 10),
-    imapSecure,
-    imapUsername || email,
-    imapPassword,
-  )
-  if (!imapResult.success) {
-    return NextResponse.json({ error: `IMAP: ${imapResult.error}` }, { status: 400 })
+  // 2. Verify IMAP only if provided (optional)
+  if (imapHost && imapPassword) {
+    const result = await verifyImapConnection(
+      imapHost,
+      parseInt(imapPort, 10),
+      imapSecure,
+      imapUsername || email,
+      imapPassword,
+    )
+    if (!result.success) {
+      return NextResponse.json({ error: `IMAP: ${result.error}` }, { status: 400 })
+    }
   }
 
   // 3. Encrypt passwords
   let smtpEncrypted: string
-  let imapEncrypted: string
+  let imapEncrypted: string | undefined
   try {
     smtpEncrypted = encrypt(smtpPassword)
-    imapEncrypted = encrypt(imapPassword)
+    if (imapPassword) {
+      imapEncrypted = encrypt(imapPassword)
+    }
   } catch {
     return NextResponse.json({ error: 'Encryption failed — check MAILIE_ENCRYPTION_KEY' }, { status: 500 })
   }
@@ -115,9 +123,9 @@ export async function POST(request: NextRequest) {
     `).run(
       accountId, email, displayName || null,
       smtpHost, parseInt(smtpPort, 10), smtpSecure ? 1 : 0,
-      smtpUsername || email, smtpEncrypted,
-      imapHost, parseInt(imapPort, 10), imapSecure ? 1 : 0,
-      imapUsername || email, imapEncrypted,
+      resolvedSmtpUsername, smtpEncrypted,
+      imapHost || '', imapPort ? parseInt(imapPort, 10) : 0, imapSecure ? 1 : 0,
+      imapUsername || '', imapEncrypted ?? '',
       now, now,
     )
   } else {
@@ -136,9 +144,9 @@ export async function POST(request: NextRequest) {
     `).run(
       accountId, email, displayName || null,
       smtpHost, parseInt(smtpPort, 10), smtpSecure ? 1 : 0,
-      smtpUsername || email, smtpEncrypted,
-      imapHost, parseInt(imapPort, 10), imapSecure ? 1 : 0,
-      imapUsername || email, imapEncrypted,
+      resolvedSmtpUsername, smtpEncrypted,
+      imapHost || '', imapPort ? parseInt(imapPort, 10) : 0, imapSecure ? 1 : 0,
+      imapUsername || '', imapEncrypted ?? '',
       now, now,
     )
   }

@@ -425,8 +425,7 @@ function AuthScreen({
                 disabled={
                   isConnecting ||
                   !smtpForm.email ||
-                  !smtpForm.smtpPassword ||
-                  !smtpForm.imapPassword
+                  !smtpForm.smtpPassword
                 }
                 className="font-mono text-[13px] w-full bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 h-10 mt-2"
               >
