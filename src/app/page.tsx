@@ -162,8 +162,9 @@ function AuthScreen({
   const showServerSettings = showAdvancedMailSettings || selectedPreset === 'custom'
 
   return (
-    <div className="flex items-center justify-center h-screen bg-[var(--background)]">
-      <div className="text-center max-w-md px-6">
+    <div className="flex flex-col min-h-screen bg-[var(--background)]">
+      <div className="flex-1 flex items-center justify-center px-6 py-12">
+        <div className="w-full max-w-md">
 
         {/* Logo */}
         <div className="mb-8">
@@ -461,6 +462,7 @@ function AuthScreen({
             </div>
           </TabsContent>
         </Tabs>
+        </div>
       </div>
     </div>
   )
