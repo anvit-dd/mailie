@@ -22,6 +22,7 @@ import {
   Tag,
   Plus,
   Loader2,
+  Mail,
 } from 'lucide-react'
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -61,6 +62,7 @@ interface SidebarLabel {
 
 interface SidebarProps {
   onSettingsOpen: () => void
+  onSwitchMailbox: () => void
 }
 
 function applyLabelOrder(
@@ -100,8 +102,8 @@ function getRandomizedFallbackColors(labels: Array<{ id: string }>, accountEmail
   return new Map(labels.map((label, index) => [label.id, colors[index % colors.length]]))
 }
 
-export function Sidebar({ onSettingsOpen }: SidebarProps) {
-  const { account, logout, provider } = useAuth()
+export function Sidebar({ onSettingsOpen, onSwitchMailbox }: SidebarProps) {
+  const { account, logout, provider, user } = useAuth()
   const accountEmail = account?.email
   const { folders, currentFolder, setCurrentFolder } = useEmail()
   const { handleCompose } = useCompose()
@@ -503,6 +505,13 @@ export function Sidebar({ onSettingsOpen }: SidebarProps) {
           <Settings className="w-3.5 h-3.5 shrink-0" />
           <span>Settings</span>
         </button>
+        <button
+          onClick={onSwitchMailbox}
+          className="w-full flex items-center gap-2 px-1 py-1 mb-1 text-[11px] font-mono rounded-sm text-[var(--muted-foreground)] hover:bg-[var(--surface-elevated)] hover:text-[var(--sidebar-foreground)] transition-colors"
+        >
+          <Mail className="w-3.5 h-3.5 shrink-0" />
+          <span>Switch mailbox</span>
+        </button>
 
         {/* User — avatar + name as popover trigger for logout */}
         <PopoverRoot>
@@ -516,12 +525,12 @@ export function Sidebar({ onSettingsOpen }: SidebarProps) {
           >
             <div className="w-6 h-6 rounded-full bg-[var(--surface-elevated)] flex items-center justify-center shrink-0">
               <span className="font-mono text-[10px] text-[var(--sidebar-primary)] font-semibold">
-                {account?.name?.charAt(0).toUpperCase() || 'D'}
+                {user?.username?.charAt(0).toUpperCase() || 'M'}
               </span>
             </div>
             <div className="flex-1 min-w-0 text-left">
               <p className="font-mono text-[11px] truncate text-[var(--sidebar-foreground)]">
-                {account?.name || 'Demo User'}
+                {user?.username || 'Master user'}
               </p>
               <p className="font-mono text-[10px] truncate text-[var(--muted-foreground)]">
                 {account?.email || 'demo@mailie.dev'}

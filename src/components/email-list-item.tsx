@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { Email } from '@/types/email'
 import { Paperclip, Star, Trash2 } from 'lucide-react'
 import { useEmail } from '@/contexts/email-context'
@@ -38,6 +39,8 @@ export function EmailListItem({ email, isSelected, onClick, selectedIds, toggleS
   const { avatarMap, toggleStar, trashEmail } = useEmail()
   const avatarUrl = avatarMap[email.from.email]
   const isChecked = selectedIds.has(email.id)
+  const [avatarFailed, setAvatarFailed] = useState(false)
+  const senderInitial = (email.from.name || email.from.email).charAt(0).toUpperCase()
 
   return (
     <button
@@ -63,7 +66,7 @@ export function EmailListItem({ email, isSelected, onClick, selectedIds, toggleS
         </div>
         {/* Sender avatar */}
         <div className="relative shrink-0">
-          {avatarUrl ? (
+          {avatarUrl && !avatarFailed ? (
             <Image
               src={avatarUrl}
               alt={email.from.name || email.from.email}
@@ -71,21 +74,12 @@ export function EmailListItem({ email, isSelected, onClick, selectedIds, toggleS
               height={28}
               unoptimized
               className={`w-7 h-7 rounded-full object-cover ${email.isRead ? 'opacity-50' : ''}`}
-              onError={(e) => {
-                const target = e.currentTarget as HTMLImageElement
-                const initial = (email.from.name || email.from.email).charAt(0).toUpperCase()
-                const parent = target.parentElement
-                if (parent) {
-                  parent.innerHTML = email.isRead
-                    ? `<div class="w-7 h-7 rounded-full bg-[var(--muted)] flex items-center justify-center"><span class="font-mono text-[10px] text-[var(--muted-foreground)] font-semibold">${initial}</span></div>`
-                    : `<div class="w-7 h-7 rounded-full bg-[var(--accent)]/15 flex items-center justify-center"><span class="font-mono text-[10px] text-[var(--accent)] font-semibold">${initial}</span></div>`
-                }
-              }}
+              onError={() => setAvatarFailed(true)}
             />
           ) : (
             <div className={`w-7 h-7 rounded-full flex items-center justify-center ${email.isRead ? 'bg-[var(--muted)]' : 'bg-[var(--accent)]/15'}`}>
               <span className={`font-mono text-[10px] font-semibold ${email.isRead ? 'text-[var(--muted-foreground)]' : 'text-[var(--accent)]'}`}>
-                {(email.from.name || email.from.email).charAt(0).toUpperCase()}
+                {senderInitial}
               </span>
             </div>
           )}

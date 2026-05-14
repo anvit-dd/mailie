@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getOrCreateAccount, createSession } from '@/lib/session'
+import { getOrCreateAccount, getSession, setActiveAccount } from '@/lib/session'
 import { getAppUrl, getGmailClientId, getGmailClientSecret, getGmailRedirectUri } from '@/lib/gmail-config'
 
 // GET: receives OAuth redirect from Google, validates state, exchanges code for tokens
@@ -9,18 +9,21 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state')
   const error = searchParams.get('error')
   const appUrl = getAppUrl()
+  const sessionId = request.cookies.get('session')?.value
+  const existingSession = sessionId ? getSession(sessionId) : null
 
-  console.log('[OAuth callback] URL:', request.url, '| code:', code, '| state:', state, '| error:', error)
+  if (!existingSession || !sessionId) {
+    return NextResponse.redirect(`${appUrl}/?error=login_required`)
+  }
 
   if (error || !code) {
-    console.log('[OAuth callback] Missing code or error present — error:', error, 'code:', code)
     return NextResponse.redirect(`${appUrl}/?error=${error || 'no_code'}`)
   }
 
   // Validate state to prevent CSRF
   const expectedState = request.cookies.get('oauth_state')?.value
   if (!state || state !== expectedState) {
-    console.warn('[OAuth callback] State mismatch — expected:', expectedState, 'got:', state)
+    console.warn('[OAuth callback] State mismatch')
     return NextResponse.redirect(`${appUrl}/?error=invalid_state`)
   }
 
@@ -39,8 +42,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!tokenResponse.ok) {
-      const body = await tokenResponse.text()
-      console.error('[OAuth] Token exchange failed — status:', tokenResponse.status, '| body:', body)
+      console.error('[OAuth] Token exchange failed — status:', tokenResponse.status)
       throw new Error('Token exchange failed')
     }
 
@@ -60,6 +62,7 @@ export async function GET(request: NextRequest) {
 
     // Upsert account + tokens
     const account = getOrCreateAccount(
+      existingSession.user_id,
       profile.emailAddress,
       profile.emailAddress.split('@')[0],
       tokens.access_token,
@@ -68,19 +71,11 @@ export async function GET(request: NextRequest) {
       undefined
     )
 
-    // Create session
-    const session = createSession(account.id)
+    setActiveAccount(sessionId, account.id)
 
     // Set session cookie and redirect (clear oauth_state cookie)
     const response = NextResponse.redirect(`${appUrl}/`)
     response.cookies.delete('oauth_state')
-    response.cookies.set('session', session.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      expires: new Date(session.expires_at),
-      path: '/',
-    })
 
     return response
   } catch (err) {

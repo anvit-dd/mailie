@@ -1,8 +1,14 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 
-interface Account {
+interface MasterUser {
+  id: string
+  username: string
+  phone: string
+}
+
+export interface MailAccount {
   id: string
   email: string
   name: string | null
@@ -11,51 +17,82 @@ interface Account {
     smtp: boolean
     imap: boolean
   }
+  lastUsedAt: number | null
 }
 
 interface AuthContextType {
-  account: Account | null
+  user: MasterUser | null
+  account: MailAccount | null
+  accounts: MailAccount[]
   isLoading: boolean
   isAuthenticated: boolean
+  hasActiveAccount: boolean
   provider: 'gmail' | 'smtp_imap' | null
-  login: () => void
+  login: (username: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  register: (username: string, password: string, phone: string) => Promise<{ ok: boolean; error?: string }>
+  connectGmail: () => void
   logout: () => Promise<void>
-  refreshToken: () => Promise<string | null>
+  selectAccount: (accountId: string) => Promise<{ ok: boolean; error?: string }>
+  refreshAuth: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [account, setAccount] = useState<Account | null>(null)
+  const [user, setUser] = useState<MasterUser | null>(null)
+  const [account, setAccount] = useState<MailAccount | null>(null)
+  const [accounts, setAccounts] = useState<MailAccount[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Fetch current user on mount
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch('/api/auth/me')
-        const data = await res.json()
-        if (data.user) {
-          setAccount({
-            ...data.user,
-            capabilities: data.user.capabilities ?? { smtp: true, imap: true },
-          })
-        }
-      } catch (e) {
-        console.error('Failed to fetch user', e)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchUser()
+  const applyAuthPayload = useCallback((data: { user?: MasterUser | null; activeAccount?: MailAccount | null; accounts?: MailAccount[] }) => {
+    setUser(data.user ?? null)
+    setAccount(data.activeAccount ?? null)
+    setAccounts(data.accounts ?? [])
   }, [])
 
-  // Derive provider from account
-  const provider = account?.provider ?? null
+  const refreshAuth = useCallback(async () => {
+    const res = await fetch('/api/auth/me')
+    const data = await res.json()
+    applyAuthPayload(data)
+  }, [applyAuthPayload])
 
-  const login = useCallback(() => {
-    // Redirect to server-side OAuth initiation
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      refreshAuth()
+        .catch((e) => {
+          console.error('Failed to fetch user', e)
+          applyAuthPayload({ user: null, activeAccount: null, accounts: [] })
+        })
+        .finally(() => setIsLoading(false))
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [applyAuthPayload, refreshAuth])
+
+  const login = useCallback(async (username: string, password: string) => {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+    const data = await res.json().catch(() => ({})) as { error?: string }
+    if (!res.ok) return { ok: false, error: data.error ?? 'Login failed' }
+    await refreshAuth()
+    return { ok: true }
+  }, [refreshAuth])
+
+  const register = useCallback(async (username: string, password: string, phone: string) => {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, phone }),
+    })
+    const data = await res.json().catch(() => ({})) as { error?: string }
+    if (!res.ok) return { ok: false, error: data.error ?? 'Registration failed' }
+    await refreshAuth()
+    return { ok: true }
+  }, [refreshAuth])
+
+  const connectGmail = useCallback(() => {
     window.location.href = '/api/auth/gmail'
   }, [])
 
@@ -65,30 +102,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error('Logout error', e)
     }
-    setAccount(null)
-  }, [])
+    applyAuthPayload({ user: null, activeAccount: null, accounts: [] })
+  }, [applyAuthPayload])
 
-  const refreshToken = useCallback(async (): Promise<string | null> => {
-    try {
-      const res = await fetch('/api/auth/refresh', { method: 'POST' })
-      if (!res.ok) return null
-      const data = await res.json()
-      return data.access_token
-    } catch {
-      return null
-    }
-  }, [])
+  const selectAccount = useCallback(async (accountId: string) => {
+    const res = await fetch('/api/auth/select-account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId }),
+    })
+    const data = await res.json().catch(() => ({})) as { error?: string }
+    if (!res.ok) return { ok: false, error: data.error ?? 'Account select failed' }
+    await refreshAuth()
+    return { ok: true }
+  }, [refreshAuth])
+
+  const provider = account?.provider ?? null
 
   return (
     <AuthContext.Provider
       value={{
+        user,
         account,
+        accounts,
         isLoading,
-        isAuthenticated: !!account,
+        isAuthenticated: !!user,
+        hasActiveAccount: !!account,
         provider,
         login,
+        register,
+        connectGmail,
         logout,
-        refreshToken,
+        selectAccount,
+        refreshAuth,
       }}
     >
       {children}
@@ -99,7 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext)
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
+    throw new Error('useAuth must be used within AuthProvider')
   }
   return context
 }

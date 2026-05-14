@@ -6,6 +6,7 @@
 import * as nodemailer from 'nodemailer'
 import { db } from './db'
 import { decrypt } from './crypto'
+import { allowPrivateMailHosts, assertPublicHostname } from './network-security'
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -90,6 +91,7 @@ export async function sendEmail(
   opts: SendEmailOptions,
 ): Promise<{ messageId: string }> {
   const creds = getSmtpCredentials(accountId)
+  await assertPublicHostname(creds.smtpHost, { allowPrivate: allowPrivateMailHosts() })
 
   const transporter = nodemailer.createTransport({
     host: creds.smtpHost,

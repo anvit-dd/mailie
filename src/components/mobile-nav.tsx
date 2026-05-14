@@ -19,6 +19,7 @@ import {
   Menu,
   Star,
   X,
+  Mail,
 } from 'lucide-react'
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -33,10 +34,11 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 interface MobileNavProps {
   onCompose: () => void
   onSettingsOpen: () => void
+  onSwitchMailbox: () => void
 }
 
-export function MobileNav({ onCompose, onSettingsOpen }: MobileNavProps) {
-  const { account, logout } = useAuth()
+export function MobileNav({ onCompose, onSettingsOpen, onSwitchMailbox }: MobileNavProps) {
+  const { account, logout, user } = useAuth()
   const { folders, currentFolder, setCurrentFolder } = useEmail()
   const [open, setOpen] = useState(false)
 
@@ -156,12 +158,12 @@ export function MobileNav({ onCompose, onSettingsOpen }: MobileNavProps) {
           <div className="flex items-center gap-2 mb-2 px-1">
             <div className="w-7 h-7 rounded-full bg-[var(--surface-elevated)] flex items-center justify-center shrink-0">
               <span className="font-mono text-[10px] text-[var(--sidebar-primary)] font-semibold">
-                {account?.name?.charAt(0).toUpperCase() || 'D'}
+                {user?.username?.charAt(0).toUpperCase() || 'M'}
               </span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-mono text-[12px] truncate text-[var(--sidebar-foreground)]">
-                {account?.name || 'Demo User'}
+                {user?.username || 'Master user'}
               </p>
               <p className="font-mono text-[10px] truncate text-[var(--muted-foreground)]">
                 {account?.email || 'demo@mailie.dev'}
@@ -169,6 +171,14 @@ export function MobileNav({ onCompose, onSettingsOpen }: MobileNavProps) {
             </div>
           </div>
           <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-[var(--muted-foreground)] hover:text-[var(--sidebar-foreground)]"
+              onClick={() => { onSwitchMailbox(); setOpen(false) }}
+            >
+              <Mail className="w-4 h-4" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"

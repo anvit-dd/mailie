@@ -1,8 +1,14 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { getGmailClientId, getGmailRedirectUri } from '@/lib/gmail-config'
+import { getSession } from '@/lib/session'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const sessionId = request.cookies.get('session')?.value
+  if (!sessionId || !getSession(sessionId)) {
+    return NextResponse.json({ error: 'Master login required' }, { status: 401 })
+  }
+
   const state = randomBytes(16).toString('hex')
 
   let clientId: string

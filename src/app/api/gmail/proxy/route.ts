@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAccountWithTokens, getSession } from '@/lib/session'
 import { getValidGmailAccessToken } from '@/lib/gmail'
+import { assertPublicHostname } from '@/lib/network-security'
+
+const MAX_PROXY_BYTES = 5 * 1024 * 1024
+const MAX_REDIRECTS = 3
 
 export async function GET(request: NextRequest) {
   const sessionId = request.cookies.get('session')?.value
@@ -60,9 +64,16 @@ export async function GET(request: NextRequest) {
       // Inline data embedded directly in the message (already decoded)
       if (attachmentData.data) {
         const buf = Buffer.from(normalizeBase64Url(attachmentData.data), 'base64')
+        if (buf.length > MAX_PROXY_BYTES) {
+          return new NextResponse('Image too large', { status: 413 })
+        }
+        const contentType = normalizeImageContentType(attachmentData.mimeType) || detectMimeFromMagic(buf)
+        if (!contentType || contentType === 'image/svg+xml') {
+          return new NextResponse('Unsupported image type', { status: 415 })
+        }
         return new NextResponse(buf, {
           headers: {
-            'Content-Type': attachmentData.mimeType || 'application/octet-stream',
+            'Content-Type': contentType,
             'Content-Length': String(buf.length),
             'Cache-Control': 'private, no-store, max-age=0',
           },
@@ -90,9 +101,16 @@ export async function GET(request: NextRequest) {
       }
 
       const buf = Buffer.from(base64Data, 'base64')
+      if (buf.length > MAX_PROXY_BYTES) {
+        return new NextResponse('Image too large', { status: 413 })
+      }
+      const contentType = normalizeImageContentType(attachmentData.mimeType) || detectMimeFromMagic(buf)
+      if (!contentType || contentType === 'image/svg+xml') {
+        return new NextResponse('Unsupported image type', { status: 415 })
+      }
       return new NextResponse(buf, {
         headers: {
-          'Content-Type': attachmentData.mimeType || 'application/octet-stream',
+          'Content-Type': contentType,
           'Content-Length': String(buf.length),
           'Cache-Control': 'private, no-store, max-age=0',
         },
@@ -116,20 +134,24 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const response = await fetch(imageUrl.toString(), {
-      // Don't send Accept header — some servers interpret it and return wrong type.
-      // Let the server send its natural Content-Type.
-      redirect: 'follow',
-    })
+    const response = await fetchPublicImage(imageUrl)
 
     if (!response.ok) {
       return new NextResponse('Failed to fetch image', { status: response.status || 502 })
+    }
+
+    const declaredLength = Number(response.headers.get('content-length') ?? '0')
+    if (declaredLength > MAX_PROXY_BYTES) {
+      return new NextResponse('Image too large', { status: 413 })
     }
 
     // Collect ALL bytes first — streaming a ReadableStream through NextResponse
     // can cause chunked-encoding issues with binary data in some Next.js configs.
     const arrayBuffer = await response.arrayBuffer()
     const buf = Buffer.from(arrayBuffer)
+    if (buf.length > MAX_PROXY_BYTES) {
+      return new NextResponse('Image too large', { status: 413 })
+    }
 
     const rawContentType = response.headers.get('content-type')
 
@@ -139,6 +161,10 @@ export async function GET(request: NextRequest) {
       contentType = normalizeImageContentType(rawContentType) || 'application/octet-stream'
     } else {
       contentType = detectMimeFromMagic(buf) || 'application/octet-stream'
+    }
+
+    if (!contentType.startsWith('image/') || contentType === 'image/svg+xml') {
+      return new NextResponse('Unsupported image type', { status: 415 })
     }
 
     return new NextResponse(buf, {
@@ -155,6 +181,29 @@ export async function GET(request: NextRequest) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+async function fetchPublicImage(initialUrl: URL): Promise<Response> {
+  let currentUrl = initialUrl
+
+  for (let i = 0; i <= MAX_REDIRECTS; i += 1) {
+    await assertPublicHostname(currentUrl.hostname)
+    const response = await fetch(currentUrl.toString(), {
+      redirect: 'manual',
+      headers: { Accept: 'image/*' },
+    })
+
+    if (response.status < 300 || response.status >= 400) return response
+
+    const location = response.headers.get('location')
+    if (!location) return response
+    currentUrl = new URL(location, currentUrl)
+    if (currentUrl.protocol !== 'https:' && currentUrl.protocol !== 'http:') {
+      throw new Error('Invalid redirect protocol')
+    }
+  }
+
+  throw new Error('Too many redirects')
+}
 
 /** Recursively find an inline attachment part by its Content-ID header. */
 function findAttachmentByCid(
@@ -219,14 +268,13 @@ function detectMimeFromMagic(buf: Buffer): string | null {
 
 /** Normalize a raw Content-Type header to a known image MIME string, or null. */
 function normalizeImageContentType(raw: string): string | null {
-  const ct = raw.toLowerCase()
+  const ct = raw.toLowerCase().split(';', 1)[0].trim()
   const KNOWN: Record<string, string> = {
     'image/apng': 'image/apng',
     'image/avif': 'image/avif',
     'image/gif': 'image/gif',
     'image/jpeg': 'image/jpeg',
     'image/png': 'image/png',
-    'image/svg+xml': 'image/svg+xml',
     'image/webp': 'image/webp',
     'image/bmp': 'image/bmp',
     'image/tiff': 'image/tiff',

@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       UPDATE gmail_tokens SET access_token = ?, expires_at = ?, updated_at = ? WHERE account_id = ?
     `).run(encryptToken(tokens.access_token), newExpiresAt, Date.now(), account.id)
 
-    return NextResponse.json({ access_token: tokens.access_token, expires_at: newExpiresAt })
+    return NextResponse.json({ ok: true, expires_at: newExpiresAt })
   } catch (err) {
     console.error('Token refresh error:', err)
     return NextResponse.json({ error: 'Refresh failed' }, { status: 401 })

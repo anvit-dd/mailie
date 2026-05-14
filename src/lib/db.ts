@@ -16,11 +16,23 @@ db.pragma('foreign_keys = ON')
 
 // Create tables
 db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    phone TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     name TEXT,
     picture TEXT,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    last_used_at INTEGER,
     provider TEXT DEFAULT 'gmail' NOT NULL,
     created_at INTEGER NOT NULL
   );
@@ -53,7 +65,9 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id TEXT REFERENCES accounts(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    active_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
     expires_at INTEGER NOT NULL,
     created_at INTEGER NOT NULL
   );
@@ -69,6 +83,18 @@ db.exec(`
 // Migrate old schema: add picture column if missing (CREATE TABLE IF NOT EXISTS won't alter existing tables)
 try {
   db.exec(`ALTER TABLE accounts ADD COLUMN picture TEXT`)
+} catch {
+  // Column already exists — ignore
+}
+
+try {
+  db.exec(`ALTER TABLE accounts ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE`)
+} catch {
+  // Column already exists — ignore
+}
+
+try {
+  db.exec(`ALTER TABLE accounts ADD COLUMN last_used_at INTEGER`)
 } catch {
   // Column already exists — ignore
 }
@@ -96,6 +122,41 @@ try {
 }
 
 try {
+  db.exec(`ALTER TABLE sessions ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE`)
+} catch {
+  // Column already exists — ignore
+}
+
+try {
+  db.exec(`ALTER TABLE sessions ADD COLUMN active_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL`)
+} catch {
+  // Column already exists — ignore
+}
+
+try {
+  const columns = db.prepare(`PRAGMA table_info(sessions)`).all() as Array<{ name: string; notnull: number }>
+  const accountIdColumn = columns.find((column) => column.name === 'account_id')
+  if (accountIdColumn?.notnull) {
+    db.exec(`
+      CREATE TABLE sessions_new (
+        id TEXT PRIMARY KEY,
+        account_id TEXT REFERENCES accounts(id) ON DELETE CASCADE,
+        user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+        active_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO sessions_new (id, account_id, user_id, active_account_id, expires_at, created_at)
+      SELECT id, account_id, user_id, active_account_id, expires_at, created_at FROM sessions;
+      DROP TABLE sessions;
+      ALTER TABLE sessions_new RENAME TO sessions;
+    `)
+  }
+} catch {
+  // Best-effort migration; fresh schema already has nullable account_id.
+}
+
+try {
   db.exec(`ALTER TABLE account_preferences ADD COLUMN gmail_label_order TEXT NOT NULL DEFAULT '[]'`)
 } catch {
   // Column already exists — ignore
@@ -108,8 +169,20 @@ export interface Account {
   email: string
   name: string | null
   picture?: string | null
+  user_id?: string | null
+  last_used_at?: number | null
   provider: AccountProvider
   created_at: number
+}
+
+export interface User {
+  id: string
+  username: string
+  phone: string
+  password_hash: string
+  password_salt: string
+  created_at: number
+  updated_at: number
 }
 
 export interface GmailTokens {
@@ -123,6 +196,8 @@ export interface GmailTokens {
 export interface Session {
   id: string
   account_id: string
+  user_id: string
+  active_account_id: string | null
   expires_at: number
   created_at: number
 }

@@ -17,19 +17,105 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
+  PopoverRoot,
+  PopoverTrigger,
+  PopoverPortal,
+  PopoverPositioner,
+  PopoverContent,
+} from '@/components/ui/popover'
+import {
   Select,
   SelectTrigger,
   SelectValue,
   SelectContent,
   SelectItem,
 } from '@/components/ui/select'
-import { Loader2, PenSquare, Mail, Server } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Loader2, PenSquare, Mail, Server, Plus, Trash2 } from 'lucide-react'
+import { getCountries, getCountryCallingCode } from 'libphonenumber-js'
+import type { CountryCode } from 'libphonenumber-js'
 
 const DEFAULT_LIST_WIDTH = 320
 const MIN_LIST_WIDTH = 200
 const MAX_LIST_WIDTH = 600
 
 const SYSTEM_FOLDER_IDS = new Set(['INBOX', 'SENT', 'DRAFT', 'TRASH', 'SPAM', 'STARRED'])
+
+const regionNames = new Intl.DisplayNames(['en'], { type: 'region' })
+
+const COUNTRY_CODES = getCountries()
+  .map((country) => ({
+    value: country,
+    label: regionNames.of(country) ?? country,
+    code: `+${getCountryCallingCode(country)}`,
+  }))
+  .sort((a, b) => a.label.localeCompare(b.label))
+
+function CountryCodeCombobox({
+  value,
+  onChange,
+}: {
+  value: CountryCode
+  onChange: (value: CountryCode) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const selectedCountry = COUNTRY_CODES.find((country) => country.value === value) ?? COUNTRY_CODES[0]
+
+  return (
+    <PopoverRoot open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 justify-between gap-2 px-3 font-mono text-[12px]"
+          />
+        }
+      >
+        <span className="truncate">
+          {selectedCountry.code} {selectedCountry.label}
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
+      </PopoverTrigger>
+      <PopoverPortal>
+        <PopoverPositioner align="start" side="bottom" sideOffset={4} className="w-[280px]">
+          <PopoverContent className="p-0">
+            <Command>
+              <CommandInput placeholder="Search country..." className="font-mono text-[12px]" />
+              <CommandList>
+                <CommandEmpty className="font-mono text-[12px]">No country found.</CommandEmpty>
+                <CommandGroup>
+                  {COUNTRY_CODES.map((country) => (
+                    <CommandItem
+                      key={country.value}
+                      value={`${country.label} ${country.code} ${country.value}`}
+                      data-checked={country.value === value}
+                      className="font-mono text-[12px]"
+                      onSelect={() => {
+                        onChange(country.value)
+                        setOpen(false)
+                      }}
+                    >
+                      <span className="w-12 shrink-0 text-[var(--muted-foreground)]">{country.code}</span>
+                      <span className="truncate">{country.label}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </PopoverPositioner>
+      </PopoverPortal>
+    </PopoverRoot>
+  )
+}
 
 type ProviderPreset =
   | 'gmail'
@@ -139,7 +225,279 @@ const PRESETS: Record<ProviderPreset, Partial<SmtpImapForm>> = {
 // ─────────────────────────────────────────────────────────
 // Auth Screen
 // ─────────────────────────────────────────────────────────
+function MasterAuthScreen() {
+  const { login, register } = useAuth()
+  const [loginUsername, setLoginUsername] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [registerUsername, setRegisterUsername] = useState('')
+  const [registerCountryCode, setRegisterCountryCode] = useState<CountryCode>('US')
+  const [registerPhone, setRegisterPhone] = useState('')
+  const [registerPassword, setRegisterPassword] = useState('')
+  const [registerPasswordConfirm, setRegisterPasswordConfirm] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleLogin() {
+    setIsSubmitting(true)
+    setError('')
+    try {
+      const result = await login(loginUsername, loginPassword)
+      if (!result.ok) setError(result.error ?? 'Login failed')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handleRegister() {
+    setIsSubmitting(true)
+    setError('')
+    try {
+      if (registerPassword !== registerPasswordConfirm) {
+        setError('Passwords do not match')
+        return
+      }
+
+      const phone = registerPhone.trim().startsWith('+')
+        ? registerPhone.trim()
+        : `+${getCountryCallingCode(registerCountryCode)} ${registerPhone.trim()}`
+      const result = await register(registerUsername, registerPassword, phone)
+      if (!result.ok) setError(result.error ?? 'Registration failed')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="h-screen overflow-y-auto bg-[var(--background)]">
+      <div className="flex min-h-screen items-start justify-center px-4 py-6 sm:items-center sm:px-6 sm:py-12">
+        <div className="w-full max-w-md text-center">
+          <div className="mb-8">
+            <div className="inline-flex items-center justify-center w-14 h-14 border border-[var(--border)] mb-4">
+              <span className="font-mono text-2xl font-bold text-[var(--brand)]">m</span>
+            </div>
+            <h1 className="text-4xl font-mono font-bold mb-2 tracking-tight text-[var(--foreground)]">
+              mailie<span className="text-[var(--muted-foreground)]">_</span>
+            </h1>
+            <p className="font-mono text-[13px] text-[var(--muted-foreground)]">
+              Master account
+            </p>
+          </div>
+
+          <Tabs defaultValue="login" className="w-full">
+            <TabsList className="w-full mb-6">
+              <TabsTrigger value="login" className="flex-1">Login</TabsTrigger>
+              <TabsTrigger value="register" className="flex-1">Create account</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="login">
+              <div className="space-y-3 text-left">
+                <Input value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} placeholder="username" className="font-mono text-[13px] h-9" />
+                <Input value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} type="password" placeholder="password" className="font-mono text-[13px] h-9" />
+                <Button onClick={handleLogin} disabled={isSubmitting || !loginUsername || !loginPassword} className="w-full font-mono text-[13px] h-10">
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Login
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="register">
+              <div className="space-y-3 text-left">
+                <Input value={registerUsername} onChange={(e) => setRegisterUsername(e.target.value)} placeholder="username" className="font-mono text-[13px] h-9" />
+                <div className="grid grid-cols-[minmax(170px,210px)_1fr] gap-2">
+                  <CountryCodeCombobox
+                    value={registerCountryCode}
+                    onChange={setRegisterCountryCode}
+                  />
+                  <Input value={registerPhone} onChange={(e) => setRegisterPhone(e.target.value)} placeholder="phone number" className="font-mono text-[13px] h-9" />
+                </div>
+                <Input value={registerPassword} onChange={(e) => setRegisterPassword(e.target.value)} type="password" placeholder="password" className="font-mono text-[13px] h-9" />
+                <Input value={registerPasswordConfirm} onChange={(e) => setRegisterPasswordConfirm(e.target.value)} type="password" placeholder="re-enter password" className="font-mono text-[13px] h-9" />
+                <Button onClick={handleRegister} disabled={isSubmitting || !registerUsername || !registerPhone || !registerPassword || !registerPasswordConfirm} className="w-full font-mono text-[13px] h-10">
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Create account
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          {error && <p className="mt-4 font-mono text-[12px] text-[var(--destructive)]">{error}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MailboxChooser({
+  onConnectSmtp,
+  onSelected,
+}: {
+  onConnectSmtp: () => void
+  onSelected?: () => void
+}) {
+  const { accounts, connectGmail, selectAccount, logout, user, refreshAuth } = useAuth()
+  const [error, setError] = useState('')
+  const [selectingId, setSelectingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const savedGmailAccount = accounts.find((account) => account.provider === 'gmail')
+
+  async function openAccount(accountId: string) {
+    setSelectingId(accountId)
+    setError('')
+    const result = await selectAccount(accountId)
+    if (!result.ok) setError(result.error ?? 'Account select failed')
+    if (result.ok) onSelected?.()
+    setSelectingId(null)
+  }
+
+  function handleGmailAction() {
+    if (savedGmailAccount) {
+      void openAccount(savedGmailAccount.id)
+      return
+    }
+    connectGmail()
+  }
+
+  async function deleteSmtpAccount(accountId: string, label: string) {
+    const confirmed = window.confirm(`Delete SMTP/IMAP mailbox "${label}"? This removes saved server credentials from this device.`)
+    if (!confirmed) return
+
+    setDeletingId(accountId)
+    setError('')
+    try {
+      const res = await fetch('/api/auth/delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId }),
+      })
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) {
+        setError(data.error ?? 'Failed to delete mailbox')
+        return
+      }
+      await refreshAuth()
+    } catch {
+      setError('Network error — failed to delete mailbox')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  return (
+    <div className="h-screen overflow-y-auto bg-[var(--background)]">
+      <div className="flex min-h-screen items-start justify-center px-4 py-6 sm:items-center sm:px-6 sm:py-12">
+        <div className="w-full max-w-2xl">
+          <div className="mb-8 flex flex-col items-center text-center">
+            <div className="mb-4 grid h-12 w-12 place-items-center border border-[var(--border)] bg-[var(--card)]">
+              <span className="font-mono text-xl font-bold text-[var(--brand)]">m</span>
+            </div>
+            <h1 className="font-mono text-4xl font-bold leading-none text-[var(--foreground)]">
+              mailie<span className="text-[var(--muted-foreground)]">_</span>
+            </h1>
+            <p className="mt-3 font-mono text-[12px] text-[var(--muted-foreground)]">
+              {user?.username ? `Logged in as ${user.username}` : 'Choose mailbox'}
+            </p>
+          </div>
+
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-widest text-[var(--muted-foreground)]">
+                Mailboxes
+              </p>
+              <p className="mt-1 font-mono text-[11px] text-[var(--muted-foreground)]">
+                Open saved mailbox or add another connection.
+              </p>
+            </div>
+            <span className="shrink-0 border border-[var(--border)] px-2 py-1 font-mono text-[10px] text-[var(--muted-foreground)]">
+              {accounts.length} saved
+            </span>
+          </div>
+
+          <div className="space-y-2 text-left">
+            {accounts.length === 0 && (
+              <div className="border border-dashed border-[var(--border)] bg-[var(--card)] p-6 text-center font-mono text-[12px] text-[var(--muted-foreground)]">
+                No saved mailboxes yet.
+              </div>
+            )}
+            {accounts.map((account) => (
+              <div
+                key={account.id}
+                className="group grid grid-cols-[auto_1fr_auto] items-center gap-4 border border-[var(--border)] bg-[var(--card)] p-4 transition-colors hover:border-[var(--primary)] hover:bg-[var(--surface-elevated)]"
+              >
+                <div className="grid h-10 w-10 place-items-center border border-[var(--border)] bg-[var(--background)] text-[var(--brand)]">
+                  {account.provider === 'gmail' ? <Mail className="h-4 w-4" /> : <Server className="h-4 w-4" />}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <p className="truncate font-mono text-[15px] font-semibold text-[var(--foreground)]">
+                      {account.name || account.email}
+                    </p>
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted-foreground)]">
+                      {account.provider === 'gmail' ? 'Google OAuth' : 'SMTP/IMAP'}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate font-mono text-[12px] text-[var(--muted-foreground)]">
+                    {account.email}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {account.capabilities.smtp && <span className="border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--muted-foreground)]">SMTP</span>}
+                    {account.capabilities.imap && <span className="border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--muted-foreground)]">IMAP</span>}
+                    {account.provider === 'gmail' && <span className="border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--muted-foreground)]">GMAIL</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {account.provider === 'smtp_imap' && (
+                    <Button
+                      size="icon-sm"
+                      variant="outline"
+                      onClick={() => void deleteSmtpAccount(account.id, account.name || account.email)}
+                      disabled={deletingId === account.id}
+                      className="h-9 w-9 text-[var(--destructive)] hover:text-[var(--destructive)]"
+                      aria-label={`Delete ${account.name || account.email}`}
+                      title="Delete SMTP/IMAP mailbox"
+                    >
+                      {deletingId === account.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => void openAccount(account.id)}
+                    disabled={selectingId === account.id || deletingId === account.id}
+                    className="h-9 min-w-20 font-mono text-[12px]"
+                  >
+                    {selectingId === account.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Open'}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {error && <p className="mb-3 font-mono text-[12px] text-[var(--destructive)]">{error}</p>}
+
+          <div className="mt-5 grid gap-2 sm:grid-cols-2">
+            <Button onClick={handleGmailAction} className="h-11 gap-2 font-mono text-[12px]">
+              <Mail className="h-4 w-4" />
+              {savedGmailAccount ? 'Open Gmail' : 'Connect Gmail'}
+            </Button>
+            <Button onClick={onConnectSmtp} variant="outline" className="h-11 gap-2 font-mono text-[12px]">
+              <Plus className="h-4 w-4" />
+              Add via SMTP/IMAP
+            </Button>
+          </div>
+          <div className="mt-6 flex justify-center">
+            <button onClick={() => void logout()} className="font-mono text-[11px] text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AuthScreen({
+  initialTab,
+  isAddingMailbox,
+  onBack,
   onGmailLogin,
   smtpForm,
   setSmtpForm,
@@ -149,6 +507,9 @@ function AuthScreen({
   isConnecting,
   connectError,
 }: {
+  initialTab: 'gmail' | 'smtp'
+  isAddingMailbox: boolean
+  onBack?: () => void
   onGmailLogin: () => void
   smtpForm: SmtpImapForm
   setSmtpForm: React.Dispatch<React.SetStateAction<SmtpImapForm>>
@@ -162,9 +523,23 @@ function AuthScreen({
   const showServerSettings = showAdvancedMailSettings || selectedPreset === 'custom'
 
   return (
-    <div className="flex flex-col min-h-screen bg-[var(--background)]">
-      <div className="flex-1 flex items-center justify-center px-6 py-12">
-        <div className="w-full max-w-md">
+    <div className="h-screen overflow-y-auto bg-[var(--background)]">
+      <div className="flex min-h-screen items-start justify-center px-4 py-6 sm:items-center sm:px-6 sm:py-12">
+        <div className="w-full max-w-md text-center">
+        {onBack && (
+          <div className="mb-4 flex justify-start">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onBack}
+              className="gap-2 font-mono text-[12px] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+          </div>
+        )}
 
         {/* Logo */}
         <div className="mb-8">
@@ -183,13 +558,13 @@ function AuthScreen({
         <div className="flex items-center gap-3 mb-8">
           <div className="flex-1 h-px bg-[var(--border)]" />
           <span className="font-mono text-[11px] text-[var(--muted-foreground)] uppercase tracking-widest">
-            connect
+            {isAddingMailbox ? 'add mailbox' : 'connect'}
           </span>
           <div className="flex-1 h-px bg-[var(--border)]" />
         </div>
 
         {/* Auth Tabs */}
-        <Tabs defaultValue="gmail" className="w-full">
+        <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="w-full mb-6">
             <TabsTrigger value="gmail" className="flex-1 gap-2">
               <Mail className="w-3.5 h-3.5" />
@@ -197,7 +572,7 @@ function AuthScreen({
             </TabsTrigger>
             <TabsTrigger value="smtp" className="flex-1 gap-2">
               <Server className="w-3.5 h-3.5" />
-              SMTP / IMAP
+              {isAddingMailbox ? 'Add via SMTP/IMAP' : 'SMTP / IMAP'}
             </TabsTrigger>
           </TabsList>
 
@@ -453,7 +828,7 @@ function AuthScreen({
                 className="font-mono text-[13px] w-full bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 h-10 mt-2"
               >
                 {isConnecting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                {isConnecting ? 'Connecting…' : 'Connect Account'}
+                {isConnecting ? 'Connecting…' : isAddingMailbox ? 'Add via SMTP/IMAP' : 'Connect Account'}
               </Button>
 
               <p className="font-mono text-[10px] text-[var(--muted-foreground)] text-center">
@@ -472,7 +847,7 @@ function AuthScreen({
 // Main App
 // ─────────────────────────────────────────────────────────
 export default function Home() {
-  const { isAuthenticated, isLoading, login, provider } = useAuth()
+  const { isAuthenticated, hasActiveAccount, isLoading, connectGmail, provider, refreshAuth } = useAuth()
   const { handleReply, handleForward, handleCompose } = useCompose()
   const { currentFolder, setCurrentFolder, folders, loadGmailUnreadCounts } = useEmail()
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
@@ -507,6 +882,9 @@ export default function Home() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectError, setConnectError] = useState('')
   const [selectedPreset, setSelectedPreset] = useState<ProviderPreset>('gmail')
+  const [showMailboxConnect, setShowMailboxConnect] = useState(false)
+  const [showMailboxChooser, setShowMailboxChooser] = useState(false)
+  const [connectInitialTab, setConnectInitialTab] = useState<'gmail' | 'smtp'>('gmail')
 
   function handlePresetChange(preset: ProviderPreset) {
     setSelectedPreset(preset)
@@ -558,7 +936,9 @@ export default function Home() {
         setConnectError(data.error || 'Connection failed')
         return
       }
-      window.location.reload()
+      setShowMailboxConnect(false)
+      setShowMailboxChooser(false)
+      await refreshAuth()
     } catch {
       setConnectError('Network error — please try again')
     } finally {
@@ -666,9 +1046,32 @@ export default function Home() {
 
   // Not authenticated — show auth screen
   if (!isAuthenticated) {
+    return <MasterAuthScreen />
+  }
+
+  if ((!hasActiveAccount || showMailboxChooser) && !showMailboxConnect) {
+    return (
+      <MailboxChooser
+        onConnectSmtp={() => {
+          setConnectInitialTab('smtp')
+          setShowMailboxChooser(false)
+          setShowMailboxConnect(true)
+        }}
+        onSelected={() => setShowMailboxChooser(false)}
+      />
+    )
+  }
+
+  if (showMailboxConnect) {
     return (
       <AuthScreen
-        onGmailLogin={login}
+        initialTab={connectInitialTab}
+        isAddingMailbox={true}
+        onBack={() => {
+          setShowMailboxConnect(false)
+          setShowMailboxChooser(true)
+        }}
+        onGmailLogin={connectGmail}
         smtpForm={smtpForm}
         setSmtpForm={setSmtpForm}
         selectedPreset={selectedPreset}
@@ -685,7 +1088,7 @@ export default function Home() {
     <div className="flex h-screen bg-background">
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
-        <Sidebar onSettingsOpen={() => setIsSettingsOpen(true)} />
+        <Sidebar onSettingsOpen={() => setIsSettingsOpen(true)} onSwitchMailbox={() => setShowMailboxChooser(true)} />
       </div>
 
       {/* Desktop: email list + message view */}
@@ -705,7 +1108,7 @@ export default function Home() {
       {/* Mobile */}
       <div className="flex flex-col flex-1 min-w-0 md:hidden">
         <div className="flex items-center gap-2 p-3 border-b border-[var(--border)] bg-[var(--card)] shrink-0">
-          <MobileNav onCompose={handleCompose} onSettingsOpen={() => setIsSettingsOpen(true)} />
+          <MobileNav onCompose={handleCompose} onSettingsOpen={() => setIsSettingsOpen(true)} onSwitchMailbox={() => setShowMailboxChooser(true)} />
           <span className="font-mono text-sm font-bold tracking-tight text-[var(--foreground)]">
             mailie<span className="text-[var(--muted-foreground)]">_</span>
           </span>

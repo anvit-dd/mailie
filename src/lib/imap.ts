@@ -7,6 +7,7 @@ import { ImapFlow } from 'imapflow'
 import { simpleParser, type ParsedMail, type AddressObject, type HeaderValue, type StructuredHeader } from 'mailparser'
 import { db } from './db'
 import { decrypt } from './crypto'
+import { allowPrivateMailHosts, assertPublicHostname } from './network-security'
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -105,6 +106,7 @@ async function withImap<T>(
   fn: (client: ImapFlow) => Promise<T>,
 ): Promise<T> {
   const opts = getImapCredentials(accountId)
+  await assertPublicHostname(opts.host, { allowPrivate: allowPrivateMailHosts() })
   const optionsKey = JSON.stringify({
     host: opts.host,
     port: opts.port,

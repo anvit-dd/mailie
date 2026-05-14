@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/auth-context'
-import { MessageBody } from './message-body'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, Mail, Paperclip } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Paperclip } from 'lucide-react'
 import type { EmailDetail } from '@/lib/mail-provider'
+import DOMPurify from 'dompurify'
 
 interface ThreadViewProps {
   threadId: string
@@ -30,6 +30,15 @@ function formatDate(date: Date): string {
   } else {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: days > 365 ? 'numeric' : undefined })
   }
+}
+
+function sanitizeThreadHtml(message: EmailDetail): string {
+  const html = message.body || message.bodyPlain.replace(/\n/g, '<br>')
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
+  })
 }
 
 export function ThreadView({ threadId, subject, onBack, onReply, onForward }: ThreadViewProps) {
@@ -263,7 +272,7 @@ export function ThreadView({ threadId, subject, onBack, onReply, onForward }: Th
                     <div
                       className="prose prose-sm max-w-none text-[var(--foreground)]"
                       dangerouslySetInnerHTML={{
-                        __html: currentMessage.body || currentMessage.bodyPlain.replace(/\n/g, '<br>')
+                        __html: sanitizeThreadHtml(currentMessage)
                       }}
                     />
                   </div>

@@ -161,6 +161,10 @@ ${Array.from({ length: 60 }, (_, i) => `<p>Paragraph ${i + 1}: Lorem ipsum dolor
 }
 
 export async function GET(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const { searchParams } = new URL(request.url)
   const type = searchParams.get('type') || 'plain-text'
 

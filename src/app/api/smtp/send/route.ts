@@ -33,8 +33,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Not an SMTP/IMAP account' }, { status: 403 })
   }
 
-  const creds = db.prepare(`SELECT email FROM mail_credentials WHERE account_id = ?`).get(session.account_id) as { email: string } | undefined
-
   let body: Record<string, unknown>
   try {
     body = await request.json()

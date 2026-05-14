@@ -6,9 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { encrypt } from '@/lib/crypto'
-import { createSession } from '@/lib/session'
+import { getSession, setActiveAccount } from '@/lib/session'
 import { verifySmtpConnection, verifyImapConnection } from '@/lib/smtp'
 import { randomBytes } from 'crypto'
+import { allowPrivateMailHosts, assertPublicHostname } from '@/lib/network-security'
 
 function parsePort(value: string, fieldName: string): { port: number } | { error: string } {
   const port = Number(value)
@@ -19,6 +20,12 @@ function parsePort(value: string, fieldName: string): { port: number } | { error
 }
 
 export async function POST(request: NextRequest) {
+  const sessionId = request.cookies.get('session')?.value
+  const session = sessionId ? getSession(sessionId) : null
+  if (!session || !sessionId) {
+    return NextResponse.json({ error: 'Master login required' }, { status: 401 })
+  }
+
   let body: {
     email: string
     displayName: string
@@ -95,6 +102,14 @@ export async function POST(request: NextRequest) {
   const resolvedSmtpUsername = isResend ? 'resend' : (smtpUsername || email)
   const resolvedImapUsername = imapUsername || smtpUsername || email
 
+  try {
+    if (hasSmtpConfig) await assertPublicHostname(smtpHost, { allowPrivate: allowPrivateMailHosts() })
+    if (hasImapConfig) await assertPublicHostname(imapHost, { allowPrivate: allowPrivateMailHosts() })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Invalid mail server host'
+    return NextResponse.json({ error: message }, { status: 400 })
+  }
+
   // 1. Verify SMTP
   if (hasSmtpConfig) {
     const smtpResult = await verifySmtpConnection(
@@ -138,14 +153,17 @@ export async function POST(request: NextRequest) {
   const now = Date.now()
 
   // 4. Upsert account
-  const existing = db.prepare(`SELECT id FROM accounts WHERE email = ?`).get(email) as { id: string } | undefined
+  const existing = db.prepare(`SELECT id, user_id FROM accounts WHERE email = ?`).get(email) as { id: string; user_id: string | null } | undefined
   let accountId: string
 
   if (existing) {
+    if (existing.user_id && existing.user_id !== session.user_id) {
+      return NextResponse.json({ error: 'Mailbox already belongs to another user' }, { status: 409 })
+    }
     accountId = existing.id
     db.prepare(`
-      UPDATE accounts SET name = ?, provider = 'smtp_imap' WHERE id = ?
-    `).run(displayName || null, accountId)
+      UPDATE accounts SET name = ?, provider = 'smtp_imap', user_id = ?, last_used_at = ? WHERE id = ?
+    `).run(displayName || null, session.user_id, now, accountId)
     // Update credentials
     db.prepare(`
       INSERT INTO mail_credentials
@@ -173,9 +191,9 @@ export async function POST(request: NextRequest) {
   } else {
     accountId = randomBytes(16).toString('hex')
     db.prepare(`
-      INSERT INTO accounts (id, email, name, provider, created_at)
-      VALUES (?, ?, ?, 'smtp_imap', ?)
-    `).run(accountId, email, displayName || null, now)
+      INSERT INTO accounts (id, email, name, user_id, last_used_at, provider, created_at)
+      VALUES (?, ?, ?, ?, ?, 'smtp_imap', ?)
+    `).run(accountId, email, displayName || null, session.user_id, now, now)
 
     db.prepare(`
       INSERT INTO mail_credentials
@@ -193,17 +211,9 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // 5. Create session
-  const session = createSession(accountId)
+  setActiveAccount(sessionId, accountId)
 
   const response = NextResponse.json({ ok: true })
-  response.cookies.set('session', session.id, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 30 * 24 * 60 * 60,
-    path: '/',
-  })
 
   return response
 }
