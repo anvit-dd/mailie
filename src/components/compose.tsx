@@ -227,8 +227,7 @@ export function Compose({ isOpen, onClose, inline = false, replyTo }: ComposePro
     e.target.value = ''
   }
 
-  // Initialize body HTML — empty for mailie replies (no auto-quote policy),
-  // or the raw replyTo.body if it contains HTML from a forwarded email.
+  // Initialize body HTML. Replies include a blank paragraph followed by the quoted original message.
   const initialBodyHtml = replyTo?.body || ''
 
   const editor = useEditor({

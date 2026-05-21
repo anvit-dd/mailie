@@ -13,16 +13,21 @@ export function ComposePanel() {
   const [mounted, setMounted] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setMounted(true))
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
 
   useEffect(() => {
-    if (!isComposeOpen) setIsCollapsed(false)
+    if (isComposeOpen) return
+    const frame = window.requestAnimationFrame(() => setIsCollapsed(false))
+    return () => window.cancelAnimationFrame(frame)
   }, [isComposeOpen])
 
   if (!mounted || !isComposeOpen) return null
 
   const subjectLabel = replyTo
-    ? `Re: ${replyTo.subject || 'this message'}`
+    ? (replyTo.subject || 'Reply')
     : 'New Message'
 
   return createPortal(

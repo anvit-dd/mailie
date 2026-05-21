@@ -313,6 +313,17 @@
   margin: 0.25em 0;
 }
 
+.ProseMirror blockquote {
+  margin: 0.75rem 0 0 0.25rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+  color: var(--muted-foreground);
+}
+
+.ProseMirror blockquote p {
+  margin: 0.35rem 0;
+}
+
 .ProseMirror [data-resize-container] {
   align-items: flex-start !important;
   max-width: 100% !important;

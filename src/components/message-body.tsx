@@ -426,10 +426,11 @@ function MessageBodyContent({ selectedEmail, noPadding }: { selectedEmail: Email
   )
 }
 
-export function MessageBody({ noPadding }: { noPadding?: boolean }) {
+export function MessageBody({ noPadding, email }: { noPadding?: boolean; email?: EmailDetail }) {
   const { selectedEmail } = useEmail()
+  const message = email ?? selectedEmail
 
-  if (!selectedEmail) {
+  if (!message) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
@@ -444,5 +445,5 @@ export function MessageBody({ noPadding }: { noPadding?: boolean }) {
     )
   }
 
-  return <MessageBodyContent selectedEmail={selectedEmail} noPadding={noPadding} />
+  return <MessageBodyContent selectedEmail={message} noPadding={noPadding} />
 }

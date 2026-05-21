@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
       labels: m.labelIds ?? [],
       hasAttachments: attachments.length > 0,
       attachments,
+      headers: Object.fromEntries(headers.map((header) => [header.name, header.value])),
       inReplyTo: inReplyToHeader?.value,
       references: referencesHeader?.value?.split(' ').filter(Boolean),
     }

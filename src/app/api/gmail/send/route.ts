@@ -16,12 +16,38 @@ interface InlineImageInput {
   data: string
 }
 
+function asStringArray(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined
+  if (typeof value === 'string') return value.trim() ? [value.trim()] : []
+  if (!Array.isArray(value)) return undefined
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
 function wrapBase64(input: string): string {
   return input.match(/.{1,76}/g)?.join('\r\n') ?? input
 }
 
 function escapeHeaderValue(value: string): string {
   return value.replace(/"/g, '')
+}
+
+function sanitizeHeaderValue(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.replace(/[\r\n]+/g, ' ').trim()
+  return normalized || undefined
+}
+
+function normalizeReferences(value: unknown): string | undefined {
+  const raw = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string').join(' ')
+    : typeof value === 'string'
+      ? value
+      : ''
+  const normalized = raw.replace(/[\r\n]+/g, ' ').split(/\s+/).filter(Boolean)
+  return [...new Set(normalized)].join(' ') || undefined
 }
 
 function extractInlineImages(html: string): { html: string; images: InlineImageInput[] } {
@@ -175,14 +201,28 @@ export async function POST(request: NextRequest) {
 
   const accessToken = await getValidGmailAccessToken(session.account_id)
 
-  const body = await request.json()
-  const { to, subject, body: emailBody, cc, bcc, inReplyTo, references, threadId, attachments } = body
+  let body: Record<string, unknown>
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
 
-  if (!to) {
+  const { subject, inReplyTo, references, threadId, attachments } = body
+  const to = asStringArray(body.to)
+  const cc = asStringArray(body.cc)
+  const bcc = asStringArray(body.bcc)
+  const emailBody = typeof body.body === 'string'
+    ? body.body
+    : typeof body.html === 'string'
+      ? body.html
+      : ''
+
+  if (!to?.length) {
     return NextResponse.json({ error: 'Missing required recipients' }, { status: 400 })
   }
 
-  if (typeof emailBody === 'string' && /\bsrc\s*=\s*["']blob:/i.test(emailBody)) {
+  if (/\bsrc\s*=\s*["']blob:/i.test(emailBody)) {
     return NextResponse.json(
       { error: 'Inline images are still local blob URLs. Please retry after the editor finishes loading the image.' },
       { status: 400 }
@@ -190,14 +230,14 @@ export async function POST(request: NextRequest) {
   }
 
   const rawMime = buildMimeMessage({
-    to: Array.isArray(to) ? to : [to],
-    subject,
+    to,
+    subject: sanitizeHeaderValue(subject) ?? '',
     body: emailBody,
     cc,
     bcc,
-    inReplyTo,
-    references,
-    attachments,
+    inReplyTo: sanitizeHeaderValue(inReplyTo),
+    references: normalizeReferences(references),
+    attachments: Array.isArray(attachments) ? attachments as AttachmentInput[] : undefined,
   })
 
   const raw = Buffer.from(rawMime)
@@ -207,7 +247,7 @@ export async function POST(request: NextRequest) {
     .replace(/=+$/, '')
 
   const payload: Record<string, unknown> = { raw }
-  if (threadId) payload.threadId = threadId
+  if (typeof threadId === 'string' && threadId.trim()) payload.threadId = threadId.trim()
 
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
